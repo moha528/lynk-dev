@@ -1,0 +1,130 @@
+@import "tailwindcss";
+
+@theme {
+  /* Background scale */
+  --color-bg: oklch(0.16 0.005 264);
+  --color-bg-soft: oklch(0.185 0.005 264);
+  --color-panel: oklch(0.205 0.006 264);
+  --color-panel-hover: oklch(0.235 0.007 264);
+  --color-elevated: oklch(0.255 0.008 264);
+
+  /* Border scale */
+  --color-border: oklch(0.275 0.008 264);
+  --color-border-strong: oklch(0.345 0.01 264);
+
+  /* Text scale */
+  --color-text: oklch(0.96 0.005 264);
+  --color-text-soft: oklch(0.78 0.008 264);
+  --color-muted: oklch(0.6 0.008 264);
+  --color-muted-soft: oklch(0.46 0.008 264);
+
+  /* Accent — cyan/sky */
+  --color-accent: oklch(0.78 0.13 218);
+  --color-accent-soft: oklch(0.62 0.1 218);
+  --color-accent-bg: oklch(0.32 0.07 218);
+
+  /* Status */
+  --color-success: oklch(0.74 0.16 152);
+  --color-warning: oklch(0.82 0.16 85);
+  --color-danger: oklch(0.68 0.2 25);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Scrollbars discrets, dans le ton */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-soft);
+  background-clip: padding-box;
+}
+
+/* xterm.js — petit overlay pour qu'il s'intègre */
+.xterm .xterm-viewport {
+  scrollbar-width: thin;
+}
+
+/* Shake utilisée par UnlockOverlay en cas de PIN incorrect. */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-6px);
+  }
+  40% {
+    transform: translateX(6px);
+  }
+  60% {
+    transform: translateX(-4px);
+  }
+  80% {
+    transform: translateX(4px);
+  }
+}
+
+/* Bump: scale léger quand un slot PIN se remplit. */
+@keyframes pin-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Pulse subtil pour le slot actif (caret-like). */
+@keyframes pin-caret {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Pulse de la boîte entière pendant la vérification async. */
+@keyframes pin-verify {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}

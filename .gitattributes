@@ -1,0 +1,26 @@
+# Fins de ligne déterministes sur tout l'arbre.
+# CRITIQUE pour les migrations sqlx : le checksum est calculé sur les octets du
+# fichier .sql à la compilation. Si CRLF/LF varient entre builds/plateformes,
+# sqlx lève « migration has been modified » au lancement / à la mise à jour.
+* text=auto eol=lf
+
+*.sql   text eol=lf
+*.rs    text eol=lf
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.toml  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+
+# Binaires : jamais de conversion.
+*.png   binary
+*.bmp   binary
+*.ico   binary
+*.icns  binary
+*.jpg   binary
+*.woff2 binary
+*.dll   binary
