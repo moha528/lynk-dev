@@ -31,6 +31,8 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite", "migrate", "mac
 
 # Hash du PIN (verrouillage applicatif). Argon2id, paramètres OWASP.
 argon2 = "0.5"
+# Fournit OsRng (génération du sel Argon2) — feature `getrandom` requise.
+rand_core = { version = "0.6", features = ["getrandom"] }
 
 # Utils
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }

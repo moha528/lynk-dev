@@ -2256,6 +2256,7 @@ dependencies = [
  "anyhow",
  "argon2",
  "chrono",
+ "rand_core",
  "serde",
  "serde_json",
  "sqlx",
