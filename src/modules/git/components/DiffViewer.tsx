@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { cn } from "@/lib/utils";
+import { DiffView } from "@/components/ui/DiffView";
 
 import { gitApi } from "../ipc";
 
@@ -11,11 +11,10 @@ type Props = {
 };
 
 /**
- * Affichage d'un diff unifié.
+ * Charge le diff d'un fichier et le confie a `DiffView`.
  *
- * Coloration **par nature de ligne** seulement (ajout / retrait / en-tête) : la
- * coloration syntaxique du langage arrive au lot 2.2, avec Shiki. Ce composant
- * sera alors remplacé, pas retouché.
+ * Ce composant ne fait plus que l'acces au depot : la coloration, elle, est
+ * partagee avec le reste de l'application.
  */
 export function DiffViewer({ repoPath, filePath, staged }: Props) {
   const [diff, setDiff] = useState<string | null>(null);
@@ -54,28 +53,5 @@ export function DiffViewer({ repoPath, filePath, staged }: Props) {
     );
   }
 
-  return (
-    <pre className="overflow-auto p-3 font-mono text-[11px] leading-relaxed">
-      {diff.split("\n").map((line, index) => (
-        <div
-          // Les lignes d'un diff n'ont pas d'identité : l'index est stable tant
-          // que le diff ne change pas, et il change en bloc.
-          key={`${index}-${line}`}
-          className={cn("whitespace-pre-wrap break-all", lineClass(line))}
-        >
-          {line || " "}
-        </div>
-      ))}
-    </pre>
-  );
-}
-
-function lineClass(line: string): string {
-  // L'ordre compte : `+++` et `---` sont des en-têtes, pas des ajouts.
-  if (line.startsWith("+++") || line.startsWith("---")) return "text-(--color-muted-soft)";
-  if (line.startsWith("@@")) return "text-(--color-accent)";
-  if (line.startsWith("+")) return "text-(--color-success)";
-  if (line.startsWith("-")) return "text-(--color-danger)";
-  if (line.startsWith("diff ") || line.startsWith("index ")) return "text-(--color-muted-soft)";
-  return "text-(--color-text-soft)";
+  return <DiffView diff={diff} path={filePath} className="p-3" />;
 }

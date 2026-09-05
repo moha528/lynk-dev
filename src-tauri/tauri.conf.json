@@ -53,7 +53,7 @@
   "plugins": {
     "updater": {
       "endpoints": ["https://github.com/moha528/lynk-dev/releases/latest/download/latest.json"],
-      "pubkey": "PLACEHOLDER_REGENERATE_WITH_tauri_signer_generate"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDczMjk5MDZGQjJFMERBRDYKUldUVzJ1Q3liNUFwYzZwWUZjTitxcnhDUEphazBSZzFtenpwcWpNbHBNV202U1RLREIvOUs0NWEK"
     }
   }
 }

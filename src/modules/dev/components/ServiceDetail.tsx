@@ -14,12 +14,12 @@ import {
 } from "@/components/ui/AlertDialog";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { LogView } from "@/components/ui/LogView";
 import { formatError, toastError } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 
 import { STATUS_LABEL, TONE_TEXT, TYPE_LABEL, formatUptime, isUp, statusTone } from "../status";
 import type { ServiceRuntime } from "../types";
-import { LogPanel } from "./LogPanel";
 import { StatusDot } from "./StatusDot";
 
 type Props = {
@@ -141,7 +141,7 @@ export function ServiceDetail({
         ))}
       </nav>
 
-      {tab === "logs" && <LogPanel runtime={runtime} onClear={onClearLogs} />}
+      {tab === "logs" && <LogView lines={runtime.logs} onClear={onClearLogs} />}
       {tab === "config" && <ConfigTab runtime={runtime} onEdit={onEdit} onDelete={onDelete} />}
       {tab === "env" && <EnvTab runtime={runtime} />}
     </div>

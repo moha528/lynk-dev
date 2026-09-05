@@ -1,14 +1,23 @@
 import { ArrowDownToLine, Copy, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { Input } from "@/components/ui/Input";
+import { LEVEL_CLASS, detectLevel, parseAnsi, stripAnsi } from "@/lib/ansi";
 import { cn } from "@/lib/utils";
 
-import type { LogEntry, LogStream, ServiceRuntime } from "../types";
+import { Input } from "./Input";
+
+export type LogStream = "stdout" | "stderr" | "system";
+
+export type LogLine = {
+  timestamp: number;
+  stream: LogStream;
+  text: string;
+};
 
 type Props = {
-  runtime: ServiceRuntime;
+  lines: LogLine[];
   onClear: () => void;
+  emptyLabel?: string;
 };
 
 const STREAMS: { id: LogStream; label: string }[] = [
@@ -17,38 +26,41 @@ const STREAMS: { id: LogStream; label: string }[] = [
   { id: "system", label: "système" },
 ];
 
-const STREAM_CLASS: Record<LogStream, string> = {
-  stdout: "text-(--color-text-soft)",
-  stderr: "text-(--color-danger)",
-  system: "italic text-(--color-muted)",
-};
-
 /** Distance au bas en dessous de laquelle on considère l'utilisateur « en bas ». */
 const STICK_THRESHOLD = 40;
 
-export function LogPanel({ runtime, onClear }: Props) {
+/**
+ * Visionneuse de logs : séquences ANSI interprétées, niveaux mis en évidence,
+ * filtre par flux, recherche surlignée et suivi automatique.
+ */
+export function LogView({ lines, onClear, emptyLabel = "Aucun log" }: Props) {
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<Set<LogStream>>(new Set());
   const [follow, setFollow] = useState(true);
   const scroller = useRef<HTMLDivElement>(null);
 
-  const lines = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return runtime.logs.filter((entry) => {
-      if (hidden.has(entry.stream)) return false;
-      if (!needle) return true;
-      return entry.text.toLowerCase().includes(needle);
-    });
-  }, [runtime.logs, query, hidden]);
+  const needle = query.trim().toLowerCase();
+
+  const visible = useMemo(
+    () =>
+      lines.filter((line) => {
+        if (hidden.has(line.stream)) return false;
+        if (!needle) return true;
+        // La recherche porte sur le texte **sans** séquences ANSI : sinon un
+        // mot coloré est introuvable, coupé en deux par un code d'échappement.
+        return stripAnsi(line.text).toLowerCase().includes(needle);
+      }),
+    [lines, hidden, needle],
+  );
 
   // Suivi automatique : on ne colle en bas que si l'utilisateur y est déjà.
-  // Sans ce garde-fou, lire un log ancien pendant qu'un service démarre est
-  // impossible — l'écran saute à chaque ligne.
+  // Sans ce garde-fou, lire une ligne ancienne pendant qu'un service démarre
+  // est impossible — l'écran saute à chaque arrivée.
   useEffect(() => {
-    if (!follow || lines.length === 0) return;
+    if (!follow || visible.length === 0) return;
     const element = scroller.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [follow, lines.length]);
+  }, [follow, visible.length]);
 
   const onScroll = () => {
     const element = scroller.current;
@@ -68,7 +80,9 @@ export function LogPanel({ runtime, onClear }: Props) {
   };
 
   const copyAll = () => {
-    void navigator.clipboard.writeText(lines.map((entry) => entry.text).join("\n"));
+    // On copie du texte propre : coller des codes d'échappement dans un ticket
+    // ne rend service à personne.
+    void navigator.clipboard.writeText(visible.map((line) => stripAnsi(line.text)).join("\n"));
   };
 
   return (
@@ -79,7 +93,7 @@ export function LogPanel({ runtime, onClear }: Props) {
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Rechercher dans les logs"
+            placeholder="Rechercher"
             className="h-7 pl-8 text-xs"
           />
         </div>
@@ -102,7 +116,7 @@ export function LogPanel({ runtime, onClear }: Props) {
           ))}
         </div>
 
-        <span className="font-mono text-[10px] text-(--color-muted-soft)">{lines.length}</span>
+        <span className="font-mono text-[10px] text-(--color-muted-soft)">{visible.length}</span>
 
         <div className="flex items-center gap-0.5">
           <IconButton
@@ -126,20 +140,14 @@ export function LogPanel({ runtime, onClear }: Props) {
         onScroll={onScroll}
         className="min-h-0 flex-1 overflow-auto bg-(--color-bg) px-3 py-2"
       >
-        {lines.length === 0 ? (
+        {visible.length === 0 ? (
           <p className="pt-6 text-center text-xs text-(--color-muted)">
-            {runtime.logs.length === 0 ? "Aucun log" : "Aucune ligne ne correspond"}
+            {lines.length === 0 ? emptyLabel : "Aucune ligne ne correspond"}
           </p>
         ) : (
           <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
-            {lines.map((entry, index) => (
-              <LogLine
-                // Les lignes n'ont pas d'identité propre ; l'horodatage et
-                // l'index suffisent et restent stables tant qu'on n'efface pas.
-                key={`${entry.timestamp}-${index}`}
-                entry={entry}
-                query={query.trim()}
-              />
+            {visible.map((line, index) => (
+              <Row key={`${line.timestamp}-${index}`} line={line} needle={needle} />
             ))}
           </pre>
         )}
@@ -148,15 +156,47 @@ export function LogPanel({ runtime, onClear }: Props) {
   );
 }
 
-function LogLine({ entry, query }: { entry: LogEntry; query: string }) {
-  return <div className={STREAM_CLASS[entry.stream]}>{highlight(entry.text, query)}</div>;
+function Row({ line, needle }: { line: LogLine; needle: string }) {
+  const level = detectLevel(line.text);
+
+  // Le flux prime sur le niveau : `stderr` est rouge même sans mot-clé, et une
+  // ligne « système » vient de Lynk Dev, pas du service.
+  const base =
+    line.stream === "stderr"
+      ? "text-(--color-danger)"
+      : line.stream === "system"
+        ? "italic text-(--color-muted)"
+        : level
+          ? LEVEL_CLASS[level]
+          : "text-(--color-text-soft)";
+
+  // Recherche et couleurs ANSI ne cohabitent pas : quand on cherche, le
+  // surlignage prime et la ligne est rendue en texte propre. Chercher, c'est
+  // vouloir *trouver*, pas admirer les couleurs.
+  if (needle) {
+    return <div className={base}>{highlight(stripAnsi(line.text), needle)}</div>;
+  }
+
+  const spans = parseAnsi(line.text);
+  const colored = spans.some((span) => span.className);
+  if (!colored) {
+    return <div className={base}>{stripAnsi(line.text) || " "}</div>;
+  }
+
+  return (
+    <div>
+      {spans.map((span, index) => (
+        <span key={`${index}-${span.text}`} className={span.className || base}>
+          {span.text}
+        </span>
+      ))}
+    </div>
+  );
 }
 
-/** Met en évidence les occurrences de `query`, sans dépendance ni regex. */
-function highlight(text: string, query: string) {
-  if (!query) return text;
+/** Met en évidence les occurrences de `needle`, sans dépendance ni regex. */
+function highlight(text: string, needle: string) {
   const lower = text.toLowerCase();
-  const needle = query.toLowerCase();
   const parts: React.ReactNode[] = [];
   let cursor = 0;
 
@@ -175,7 +215,7 @@ function highlight(text: string, query: string) {
     cursor = found + needle.length;
   }
   if (cursor < text.length) parts.push(text.slice(cursor));
-  return parts;
+  return parts.length > 0 ? parts : text || " ";
 }
 
 function IconButton({

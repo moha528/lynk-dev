@@ -348,11 +348,14 @@ et une passe d'ensemble sur l'ergonomie.
 - [x] `CHANGELOG.md`, avec le rappel que la version vit dans **deux** fichiers qui doivent bouger
       ensemble (`package.json` et `tauri.conf.json`) — c'est celle de `tauri.conf.json` que
       l'updater compare
-- [ ] ⛔ **BLOQUANT avant le premier tag** — `pnpm tauri signer generate` puis :
-      renseigner `pubkey` (`tauri.conf.json:56`, encore `PLACEHOLDER_...`) et poser les secrets
-      GitHub `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-      **La clé privée ne va JAMAIS dans le dépôt.** Tant que ce n'est pas fait, `release.yml`
-      échouera sur un tag — la CI de tous les jours, elle, n'est pas concernée.
+- [x] **Clé de signature posée** (2026-09-05). `pubkey` renseignée dans `tauri.conf.json` ;
+      secrets `TAURI_SIGNING_PRIVATE_KEY` et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` en place.
+      La clé privée vit dans `~/.tauri/lynk-dev.key`, **hors du dépôt**, avec son mot de passe
+      à côté (`~/.tauri/lynk-dev.password`) pour pouvoir signer en local.
+      ⚠️ Le CLI **imprime la clé privée sur la sortie standard** : la génération a été redirigée
+      vers un fichier temporaire, supprimé aussitôt. Ne jamais la relancer sans cette précaution.
+- [x] Actions GitHub obsolètes relevées : `checkout@v4` et `setup-node@v4` (Node 20 déprécié)
+      passées en `v5`.
 - [x] ~~**Décider du nom des dépôts**~~ — **fait le 2026-09-05**, avant toute release : l'Electron
       est devenu `moha528/lynk-dev-electron`, puis ce dépôt a pris le nom **`moha528/lynk-dev`**.
       Le dépôt Tauri n'avait **aucune release** → aucune URL publiée cassée. L'Electron conserve la
@@ -364,19 +367,28 @@ et une passe d'ensemble sur l'ergonomie.
 
 ### 2.2 — Viewer + coloration syntaxique
 
-- [ ] Ajouter `shiki` ; **surligneur unique et partagé** dans `src/lib/highlight.ts` (une seule
-      instance, grammaires chargées à la demande)
-- [ ] Mapper les 7 thèmes de l'app sur ceux de Shiki — `src/lib/themes.ts:71-345`
-      (`catppuccin-mocha`, `catppuccin-latte`, `tokyo-night`, `dracula`, `solarized-dark`,
-      `solarized-light`, `gruvbox-dark-medium`) ; le changement de thème doit repeindre le viewer
-- [ ] Composant `<CodeView>` : langage déduit de l'extension, numéros de ligne, repli sur du texte
-      brut si la grammaire manque, virtualisation au-delà de ~2 000 lignes
-- [ ] Composant `<DiffView>` : coloration **du langage** + surcouche ajout/suppression, pliage des
-      blocs inchangés → remplace `DiffViewer` (Lot 1.1)
-- [ ] Composant `<LogView>` : séquences ANSI interprétées, niveaux `ERROR|WARN|INFO` mis en
-      évidence, `stderr` distingué de `stdout`, recherche, suivi automatique → remplace `LogPanel` (Lot 1.2)
-- [ ] Branchements : viewer de fichier Git, diff, logs Dev, `.env`, YAML/JSON de config
-- [ ] Vérifier le poids du bundle après coup (`dist/` avant/après)
+- [x] `shiki` ajouté, **surligneur unique et partagé** dans `src/lib/highlight.ts`. Moteur et
+      thèmes chargés une seule fois ; **les grammaires à la demande** : le build produit un chunk
+      par langage (34 au total), rien n'est téléchargé tant qu'on n'ouvre pas un fichier de ce type.
+- [x] Les 7 thèmes de l'app mappés sur ceux de Shiki — c'est ce qui a fait retenir Shiki : aucune
+      palette à réinventer, un diff prend exactement les couleurs de la fenêtre, et changer de
+      thème repeint le viewer.
+- [x] `CodeView` — langage déduit du chemin (extension **ou** nom de fichier : `Dockerfile`,
+      `.env`, `Cargo.toml`), numéros de ligne, repli sur le texte brut si la grammaire manque.
+      ⚠️ Au-delà de 2 000 lignes, les suivantes ne sont **pas rendues** et un pied de bloc le dit :
+      c'est un plafond, **pas** de la virtualisation.
+- [x] `DiffView` — **coloration du langage à l'intérieur du diff**. La grammaire `diff` de Shiki
+      colorerait les `+` et les `-` en laissant le code en gris ; on fait l'inverse : marqueurs
+      retirés, contenu coloré dans son vrai langage d'un seul tenant (la grammaire a besoin du
+      contexte des lignes voisines), puis marqueur et fond reposés par-dessus.
+- [x] `LogView` — **séquences ANSI interprétées** et ramenées sur la palette de l'app, niveaux
+      `ERROR|WARN|INFO` mis en évidence, `stderr` distingué, recherche surlignée sur le texte
+      démarqué, copie sans codes d'échappement, suivi automatique.
+- [x] Branchements : diff du Git Manager, logs du Dev Manager. Les rendus maison sont supprimés.
+- [x] Poids vérifié : le chunk principal reste à **640 ko** (198 ko gzip) ; le moteur WebAssembly
+      (622 ko) et chaque grammaire sont des chunks séparés, chargés seulement à l'usage.
+- [ ] Brancher `CodeView` sur un vrai viewer de fichier (Git n'expose pas encore la consultation
+      d'un fichier hors diff) et sur les `.env` / YAML de configuration du Dev Manager.
 
 ---
 

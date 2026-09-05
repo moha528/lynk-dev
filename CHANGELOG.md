@@ -24,6 +24,13 @@ versionnage [SemVer](https://semver.org/lang/fr/).
   Remix, Vite, Django, FastAPI, Flask, Go, Rust, .NET, Laravel, Rails. Le gestionnaire de
   paquets est déduit du fichier de verrou, et le port de la source la plus fiable disponible.
 
+- **Coloration syntaxique** partout où c'est pertinent : diffs du Git Manager (langage coloré
+  *à l'intérieur* du diff), logs du Dev Manager (séquences ANSI interprétées, niveaux mis en
+  évidence). Les grammaires sont chargées à la demande, une par langage.
+- Listes déroulantes propres à l'application, à la place des `<select>` du système.
+- **Mises à jour automatiques opérationnelles** : clé de signature en place et chaîne de release
+  complète. Il ne manque qu'un tag `vX.Y.Z` pour publier.
+
 ### Corrigé
 
 - Un service configuré sur un **port privilégié** (< 1024) était signalé « déjà utilisé » en
