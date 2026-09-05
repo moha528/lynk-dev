@@ -84,9 +84,12 @@ export function McpSection() {
     }
   };
 
+  // ⚠️ Le bouton agit sur `running`, pas sur `enabled`. Dans l'état divergent
+  // — réglage actif mais port occupé — il affiche « Démarrer » ; se fier au
+  // réglage lui ferait faire l'inverse de ce qu'il annonce.
   const toggle = () =>
     guard(async () => {
-      const next = await mcpApi.setEnabled(!status?.enabled);
+      const next = await mcpApi.setEnabled(!status?.running);
       setStatus(next);
       setPort(String(next.port));
       if (next.running && !token) setToken(await mcpApi.token());
