@@ -6,11 +6,39 @@
  * `undefined` silencieux à l'exécution — d'où les tests de round-trip côté Rust.
  */
 
+/**
+ * Famille d'un service détecté — miroir de `ServiceType` côté Rust.
+ *
+ * ⚠️ Seul `docker-compose` change un comportement (sondes et arrêt passent par
+ * `docker compose`). Les autres sont cosmétiques : ils nomment ce qui a été
+ * reconnu et justifient la commande proposée.
+ */
 export type ServiceType =
+  // JVM
   | "spring-boot-maven"
   | "spring-boot-gradle"
+  // JavaScript / TypeScript
+  | "next"
+  | "nuxt"
+  | "angular"
+  | "nest"
+  | "svelte-kit"
+  | "astro"
+  | "remix"
+  | "vite"
   | "node"
+  // Python
+  | "django"
+  | "fastapi"
+  | "flask"
   | "python"
+  // Autres écosystèmes
+  | "go"
+  | "rust"
+  | "dotnet"
+  | "laravel"
+  | "rails"
+  // Conteneurs
   | "docker-compose"
   | "custom";
 

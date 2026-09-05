@@ -22,8 +22,23 @@ fn cwd() -> &'static Path {
 /// il compte : un simple « est-ce que je peux me connecter ? » répondrait faux
 /// pour un port occupé par un process qui n'accepte pas encore.
 pub async fn is_port_available(port: u16) -> bool {
-    TcpListener::bind(("127.0.0.1", port)).await.is_ok()
+    match TcpListener::bind(("127.0.0.1", port)).await {
+        Ok(_) => true,
+        // ⚠️ Trouve par la CI Linux : un port < 1024 est **privilegie**. Un
+        // process ordinaire n'a pas le droit de s'y mettre en ecoute, donc
+        // l'echec de `bind` ne dit rien sur son occupation — et un service
+        // configure sur le port 80 ou 443 serait signale « deja pris » en
+        // permanence. Dans ce cas seulement, on retombe sur la seule question
+        // a laquelle on peut repondre : quelqu'un accepte-t-il une connexion ?
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+            !can_connect(port, PRIVILEGED_PROBE_TIMEOUT).await
+        }
+        Err(_) => false,
+    }
 }
+
+/// Sonde courte : sur la boucle locale, un refus de connexion est immediat.
+const PRIVILEGED_PROBE_TIMEOUT: Duration = Duration::from_millis(300);
 
 /// Attend la libération d'un port. Rend `true` s'il est libre avant l'échéance.
 pub async fn wait_for_port_free(port: u16, timeout: Duration) -> bool {
@@ -249,6 +264,16 @@ LISTEN 0 4096 *:8020 *:* users:(("node",pid=5678,fd=20))"#;
             wait_for_port_free(port, Duration::from_secs(2)).await,
             "port relache = disponible"
         );
+    }
+
+    /// Le cas trouve par la CI : sous Unix, `bind` sur un port privilegie
+    /// echoue faute de droits, ce qui ne doit pas se lire comme « occupe ».
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_free_privileged_port_is_not_reported_as_taken() {
+        // Rien n'ecoute sur le port 1 : il doit etre annonce disponible, meme
+        // si l'on n'a pas le droit de s'y lier.
+        assert!(is_port_available(1).await);
     }
 
     #[tokio::test]

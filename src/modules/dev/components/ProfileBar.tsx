@@ -11,6 +11,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/AlertDialog";
 import { Button } from "@/components/ui/Button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { cn } from "@/lib/utils";
 
 import { COUNTER_ORDER, STATUS_LABEL, TONE_BG, TONE_TEXT, statusTone } from "../status";
@@ -58,18 +65,18 @@ export function ProfileBar({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-(--color-border) bg-(--color-panel) px-3 py-2">
-      <select
-        value={activeProfileId ?? ""}
-        onChange={(event) => onSelectProfile(event.target.value)}
-        className="h-8 max-w-56 rounded-md border border-(--color-border) bg-(--color-bg) px-2 text-xs text-(--color-text) focus-visible:border-(--color-accent) focus-visible:outline-none"
-      >
-        {profiles.length === 0 && <option value="">Aucun profil</option>}
-        {profiles.map((profile) => (
-          <option key={profile.id} value={profile.id}>
-            {profile.name}
-          </option>
-        ))}
-      </select>
+      <Select value={activeProfileId ?? ""} onValueChange={onSelectProfile}>
+        <SelectTrigger className="w-48" aria-label="Profil">
+          <SelectValue placeholder="Aucun profil" />
+        </SelectTrigger>
+        <SelectContent>
+          {profiles.map((profile) => (
+            <SelectItem key={profile.id} value={profile.id}>
+              {profile.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
 
       <button
         type="button"

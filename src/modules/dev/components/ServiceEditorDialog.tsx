@@ -12,6 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { formatError, toastError } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 
@@ -26,13 +34,22 @@ type Props = {
   service: ServiceConfig | null;
 };
 
-const TYPES: ServiceType[] = [
-  "spring-boot-maven",
-  "spring-boot-gradle",
-  "node",
-  "python",
-  "docker-compose",
-  "custom",
+/**
+ * Les 22 familles, groupees par ecosysteme.
+ *
+ * A plat, une liste de cette longueur est illisible : on cherche « Next » sans
+ * savoir s'il est range avec Node ou avec Vite. Les groupes rendent le
+ * balayage immediat.
+ */
+const TYPE_GROUPS: { label: string; types: ServiceType[] }[] = [
+  { label: "JVM", types: ["spring-boot-maven", "spring-boot-gradle"] },
+  {
+    label: "JavaScript",
+    types: ["next", "nuxt", "angular", "nest", "svelte-kit", "astro", "remix", "vite", "node"],
+  },
+  { label: "Python", types: ["django", "fastapi", "flask", "python"] },
+  { label: "Autres", types: ["go", "rust", "dotnet", "laravel", "rails"] },
+  { label: "Conteneurs", types: ["docker-compose", "custom"] },
 ];
 
 type EnvRow = { key: string; value: string };
@@ -138,17 +155,22 @@ export function ServiceEditorDialog({ open, onOpenChange, service }: Props) {
           </Row>
 
           <Row label="Type">
-            <select
-              value={draft.type}
-              onChange={(event) => set("type", event.target.value as ServiceType)}
-              className="h-8 w-full rounded-md border border-(--color-border) bg-(--color-bg) px-2 text-xs text-(--color-text) focus-visible:border-(--color-accent) focus-visible:outline-none"
-            >
-              {TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {TYPE_LABEL[type]}
-                </option>
-              ))}
-            </select>
+            <Select value={draft.type} onValueChange={(value) => set("type", value as ServiceType)}>
+              <SelectTrigger aria-label="Type de service">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPE_GROUPS.map((group) => (
+                  <SelectGroup key={group.label} label={group.label}>
+                    {group.types.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {TYPE_LABEL[type]}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
+              </SelectContent>
+            </Select>
           </Row>
 
           <Row label="Répertoire">

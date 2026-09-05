@@ -283,6 +283,60 @@ Rien à supprimer ni à archiver : le code Electron reste lisible dans son dép�
 
 ---
 
+## Après le port — élargissements et corrections
+
+### Catalogue de détection : 6 → 22 familles
+
+Le catalogue hérité d'Electron ne couvrait que Spring, Node, Python et compose.
+`src-tauri/src/dev/detect.rs` (isolé du parcours, dans `scan.rs`) reconnaît désormais :
+
+| Écosystème | Familles |
+|---|---|
+| JVM | Spring Maven, Spring Gradle |
+| JavaScript | **Next, Nuxt, Angular, Nest, SvelteKit, Astro, Remix, Vite**, Node |
+| Python | **Django, FastAPI, Flask**, Python |
+| Autres | **Go, Rust, .NET, Laravel, Rails** |
+| Conteneurs | docker-compose |
+
+Ce que ça apporte concrètement :
+
+- **Le gestionnaire de paquets est déduit du fichier de verrou** — `pnpm dev`, `yarn dev`,
+  `bun run dev` ou `npm run dev`. Lancer `npm` dans un projet pnpm réinstalle un `node_modules`
+  concurrent et casse les liens : ce n'est pas un détail cosmétique.
+- **Le port vient de la source la plus fiable disponible**, dans l'ordre : le `--port` du script,
+  puis `.env`, puis le défaut du cadre (3000 pour Next, 4200 pour Angular, 5173 pour Vite…).
+- **Une application Tauri est lancée par son orchestrateur** (`pnpm tauri dev`) : `vite` seul
+  servirait la page sans jamais ouvrir la fenêtre.
+- ⛔ **Rien n'est proposé qui ne démarrerait pas.** Un `package.json` sans script lançable, un
+  espace de travail Cargo sans binaire, un dossier Python sans point d'entrée : rien n'est détecté.
+  Mieux vaut ne rien voir qu'offrir une commande qui échoue.
+
+### Défaut de portabilité trouvé par la CI
+
+Le premier passage de la CI a fait tomber `probe_reports_a_stopped_service_as_undetected` sur
+Linux et macOS — et derrière le test, un vrai défaut :
+
+> `is_port_available` définissait « libre » par « je peux m'y mettre en écoute ». Sous Unix, un
+> port **< 1024 est privilégié** : un process ordinaire ne peut jamais s'y lier. **Tout service
+> configuré sur le port 80 ou 443 aurait donc été signalé « déjà utilisé » en permanence**, et
+> n'aurait jamais démarré.
+
+Corrigé : en cas d'échec pour cause de **droits** — et dans ce cas seulement — on retombe sur la
+seule question à laquelle on peut répondre, « quelqu'un accepte-t-il une connexion ? ».
+La version Electron avait exactement le même défaut.
+
+### Selects natifs remplacés
+
+`src/components/ui/Select.tsx` (Radix) remplace les trois `<select>` natifs. Sous Windows ils
+s'affichaient avec le chrome du système, ignoraient le thème, et devenaient illisibles au-delà
+d'une poignée d'entrées — avec 22 familles, c'était intenable. Les familles sont **groupées par
+écosystème** dans l'éditeur de service.
+
+⚠️ **Reste à revoir côté UI** (signalé par le user, non traité) : d'autres facilités de sélection,
+et une passe d'ensemble sur l'ergonomie.
+
+---
+
 ## LOT 2 — Distribution + lisibilité
 
 ### 2.1 — Mises à jour automatiques ⚡ *indépendant : réalisable dès maintenant, sans attendre le Lot 1*

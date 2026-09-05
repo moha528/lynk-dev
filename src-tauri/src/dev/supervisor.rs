@@ -971,8 +971,15 @@ mod tests {
     async fn probe_reports_a_stopped_service_as_undetected() {
         let sup = Supervisor::new(Duration::from_secs(1));
         let mut cfg = config("api", noop_command());
-        // Port très improbablement occupé.
-        cfg.port = Some(1);
+        // Un port ephemere qu'on vient de relacher : personne n'ecoute dessus.
+        // (Le port 1 semblait commode, mais il est **privilegie** sous Unix :
+        // le test dependait alors des droits du process, pas du service.)
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let free_port = listener.local_addr().expect("addr").port();
+        drop(listener);
+        cfg.port = Some(free_port);
         let profile = DevProfile {
             id: "p1".into(),
             name: "profil".into(),

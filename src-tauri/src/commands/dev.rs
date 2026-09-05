@@ -14,7 +14,7 @@ use crate::dev::types::{
     DevProfile, DockerHealthReport, ManagedProcessInfo, PortCheckResult, PortRequest, ProbeResult,
     ScanProgress, ServiceScanResult,
 };
-use crate::dev::{batch, docker, net, scan, StartOptions, Supervisor};
+use crate::dev::{batch, detect, docker, net, scan, StartOptions, Supervisor};
 use crate::store::{dev_profiles as dao, DbPool};
 use crate::AppError;
 
@@ -71,7 +71,7 @@ pub async fn dev_scan(
 
 #[tauri::command]
 pub async fn dev_detect(dir_path: String) -> Result<Option<ServiceScanResult>, AppError> {
-    Ok(scan::detect_service(Path::new(&dir_path)).await)
+    Ok(detect::detect_service(Path::new(&dir_path)).await)
 }
 
 // ── Cycle de vie ─────────────────────────────────────────────────────────

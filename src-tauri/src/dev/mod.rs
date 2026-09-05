@@ -4,7 +4,8 @@
 //! - [`types`] — le contrat partagé avec le front (camelCase) ;
 //! - [`supervisor`] — le cœur : démarrage, arrêt, sondes, redémarrage auto ;
 //! - [`batch`] — démarrages groupés ordonnés par dépendances ;
-//! - [`scan`] — détection de services dans une arborescence ;
+//! - [`detect`] — la reconnaissance d'un dossier (le catalogue) ;
+//! - [`scan`] — le parcours d'une arborescence ;
 //! - [`net`] / [`docker`] — les sondes ;
 //! - [`topo`] — le tri en couches.
 //!
@@ -12,6 +13,9 @@
 //! `crate::commands::dev`, et rien d'autre ne doit s'y ajouter.
 
 pub mod batch;
+pub mod detect;
+#[cfg(test)]
+mod detect_tests;
 pub mod docker;
 pub mod net;
 pub mod scan;

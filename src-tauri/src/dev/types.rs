@@ -6,13 +6,40 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Famille d'un service détecté.
+///
+/// ⚠️ **Seul `DockerCompose` change un comportement** (sondes et arrêt passent
+/// par `docker compose`). Tous les autres sont cosmétiques : ils servent à
+/// nommer ce qu'on a reconnu et à proposer la bonne commande. En ajouter un
+/// n'a donc aucun effet de bord sur le superviseur.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ServiceType {
+    // JVM
     SpringBootMaven,
     SpringBootGradle,
+    // JavaScript / TypeScript
+    Next,
+    Nuxt,
+    Angular,
+    Nest,
+    SvelteKit,
+    Astro,
+    Remix,
+    Vite,
     Node,
+    // Python
+    Django,
+    Fastapi,
+    Flask,
     Python,
+    // Autres écosystèmes
+    Go,
+    Rust,
+    Dotnet,
+    Laravel,
+    Rails,
+    // Conteneurs
     DockerCompose,
     Custom,
 }
