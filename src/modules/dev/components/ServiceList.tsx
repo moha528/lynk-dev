@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronRight, Plus, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
+import type { CheckOptions } from "@/lib/selection";
+import { neighbour } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 
 import { STATUS_LABEL, TONE_TEXT, TYPE_LABEL, formatUptime, statusTone } from "../status";
@@ -14,7 +16,7 @@ type Props = {
   selectedId: string | null;
   onSelect: (serviceId: string) => void;
   checked: Set<string>;
-  onCheck: (serviceId: string, value: boolean) => void;
+  onCheck: (serviceId: string, value: boolean, options: CheckOptions) => void;
   onCheckMany: (serviceIds: string[], value: boolean) => void;
   onAdd: () => void;
 };
@@ -32,9 +34,9 @@ const UNGROUPED = "__ungrouped__";
  * Liste des services : recherche, filtre d'état, groupes repliables et
  * sélection multiple.
  *
- * La sélection multiple est ce qui manquait le plus à l'écran d'origine : sur
- * douze microservices, agir sur un sous-ensemble se faisait service par
- * service.
+ * La sélection accepte le **Maj+clic** pour une plage et se pilote **au
+ * clavier** : sur douze microservices, cocher un sous-ensemble un à un est le
+ * geste le plus pénible de l'écran.
  */
 export function ServiceList({
   runtimes,
@@ -50,6 +52,9 @@ export function ServiceList({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // La valeur n'est jamais lue : seul le rendu qu'elle déclenche compte.
   const [, setTick] = useState(0);
+  // `onCheckedChange` ne transmet pas l'événement : on retient l'état de la
+  // touche Maj au tout début du clic, avant que la case ne réagisse.
+  const shiftHeld = useRef(false);
 
   // Rafraîchit les durées affichées sans toucher au store.
   useEffect(() => {
@@ -80,6 +85,15 @@ export function ServiceList({
     return [...byGroup.entries()];
   }, [visible]);
 
+  /** Ordre réel à l'écran : ce que voit l'utilisateur, replis compris. */
+  const ordered = useMemo(
+    () =>
+      groups
+        .filter(([key]) => !collapsed.has(key))
+        .flatMap(([, entries]) => entries.map((entry) => entry.id)),
+    [groups, collapsed],
+  );
+
   const toggleGroup = (key: string) => {
     setCollapsed((current) => {
       const next = new Set(current);
@@ -87,6 +101,28 @@ export function ServiceList({
       else next.add(key);
       return next;
     });
+  };
+
+  const check = (serviceId: string, value: boolean) => {
+    onCheck(serviceId, value, { shiftKey: shiftHeld.current, ordered });
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = neighbour(ordered, selectedId, event.key === "ArrowDown" ? 1 : -1);
+      if (next) onSelect(next);
+      return;
+    }
+    if (event.key === " " && selectedId) {
+      event.preventDefault();
+      onCheck(selectedId, !checked.has(selectedId), { shiftKey: event.shiftKey, ordered });
+      return;
+    }
+    if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      onCheckMany(ordered, true);
+    }
   };
 
   return (
@@ -112,7 +148,7 @@ export function ServiceList({
             <Plus className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {FILTERS.map((entry) => (
             <button
               key={entry.id}
@@ -128,10 +164,24 @@ export function ServiceList({
               {entry.label}
             </button>
           ))}
+          <span className="ml-auto text-[10px] text-(--color-muted-soft)">
+            Maj+clic pour une plage
+          </span>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+      {/* biome-ignore lint/a11y/useSemanticElements: une liste de lignes à la
+          fois sélectionnables et cochables n'a pas d'équivalent natif. */}
+      <div
+        role="listbox"
+        aria-label="Services"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onMouseDownCapture={(event) => {
+          shiftHeld.current = event.shiftKey;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto p-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-(--color-accent)"
+      >
         {visible.length === 0 && (
           <p className="px-3 py-6 text-center text-xs text-(--color-muted)">Aucun service</p>
         )}
@@ -171,7 +221,7 @@ export function ServiceList({
                     runtime={runtime}
                     active={runtime.id === selectedId}
                     checked={checked.has(runtime.id)}
-                    onCheck={(value) => onCheck(runtime.id, value)}
+                    onCheck={(value) => check(runtime.id, value)}
                     onSelect={() => onSelect(runtime.id)}
                   />
                 ))}
@@ -201,6 +251,7 @@ function ServiceRow({ runtime, active, checked, onCheck, onSelect }: RowProps) {
       className={cn(
         "group flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors",
         active ? "bg-(--color-accent-bg)" : "hover:bg-(--color-panel-hover)",
+        checked && !active && "bg-(--color-panel)",
       )}
     >
       <Checkbox checked={checked} onCheckedChange={onCheck} />

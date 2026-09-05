@@ -7,6 +7,7 @@
 //! verrouillage par PIN + auto-update. Les modules métier de Lynk Dev
 //! (Git / Dev / DB) viennent se greffer ici.
 
+pub mod ai;
 pub mod commands;
 pub mod dev;
 pub mod error;
@@ -164,6 +165,12 @@ pub fn run() {
             commands::git::git_set_branch_upstream,
             commands::git::git_unset_branch_upstream,
             commands::git::git_open_in_terminal,
+            commands::ai::ai_config_get,
+            commands::ai::ai_config_set,
+            commands::ai::ai_list_models,
+            commands::ai::ai_commit_message,
+            commands::ai::ai_explain_diff,
+            commands::ai::ai_summarize_logs,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

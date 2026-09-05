@@ -332,8 +332,18 @@ s'affichaient avec le chrome du système, ignoraient le thème, et devenaient il
 d'une poignée d'entrées — avec 22 familles, c'était intenable. Les familles sont **groupées par
 écosystème** dans l'éditeur de service.
 
-⚠️ **Reste à revoir côté UI** (signalé par le user, non traité) : d'autres facilités de sélection,
-et une passe d'ensemble sur l'ergonomie.
+### Ergonomie de sélection
+
+- **Maj+clic** coche toute la plage depuis la dernière case cochée, dans les deux listes. L'ancre
+  ne bouge pas pendant un Maj+clic : on peut étendre la plage plusieurs fois depuis le même point.
+- **Navigation au clavier** : ↑/↓ déplacent la sélection, Espace coche, Ctrl+A coche tout ce qui
+  est visible.
+- ⚠️ La plage suit **l'ordre à l'écran**, pas celui des données : une liste filtrée ou repliée n'a
+  pas le même ordre, et cocher des lignes invisibles serait pire que ne rien faire.
+- Une ligne cochée se distingue d'une ligne simplement survolée.
+
+⚠️ **Reste à revoir côté UI** (signalé par le user) : la revue d'ensemble de l'ergonomie au-delà
+de la sélection.
 
 ---
 
@@ -396,22 +406,32 @@ et une passe d'ensemble sur l'ergonomie.
 
 ### 3.1 — OpenRouter
 
-- [ ] Client Rust (`src-tauri/src/ai/openrouter.rs`) : `reqwest` + en-têtes `HTTP-Referer` et
-      `X-Title` recommandés par OpenRouter
-- [ ] Clé API dans la base locale, **chiffrée par le vault existant** (`src-tauri/src/vault/`) —
-      jamais dans un fichier de config versionné
-- [ ] Réglages : section « IA » — clé, modèle, activation par fonction
-- [ ] Sélection du modèle depuis `GET /api/v1/models`, avec le **prix affiché** ; défaut sur un
-      modèle à très bas coût (candidats : Gemini Flash, DeepSeek). **Vérifier les identifiants et
-      les prix au moment de l'implémentation** — cette liste bouge tous les mois.
-- [ ] Fonction 1 — **message de commit** : entrée = `git diff --staged` (tronqué), sortie =
-      Conventional Commit. Bouton dans `CommitPanel`, message **éditable avant validation**, jamais
-      de commit automatique.
-- [ ] Fonction 2 — **explication de diff** : « qu'est-ce que ça change ? » dans le `DiffView`
-- [ ] Fonction 3 — **résumé de logs** : sur une sélection du `LogView`, « pourquoi ça a crashé ? »
-- [ ] Garde-fous : aucun appel sans clé configurée, budget de tokens borné, erreur réseau =
-      dégradation silencieuse (l'app reste utilisable), **rien n'est envoyé sans une action explicite**
-- [ ] Indicateur de coût cumulé de la session (les réponses OpenRouter portent l'usage)
+- [x] Client Rust `ai/openrouter.rs` — `reqwest`, en-têtes `HTTP-Referer` / `X-Title`, erreurs
+      d'OpenRouter remontées telles quelles (elles sont explicites, y compris sur un 200).
+- [x] Consignes isolées et **pures** dans `ai/prompts.rs`, avec leurs tests : c'est la partie
+      qu'on relira le plus, elle doit être vérifiable sans appel réseau.
+      L'entrée est **bornée à 24 000 caractères**, et la coupure est annoncée au modèle pour qu'il
+      n'affirme rien sur ce qu'il ne voit pas. ⚠️ La troncature respecte les frontières de
+      caractères — couper au milieu d'un « é » ferait paniquer l'indexation.
+- [x] Réglages : section « IA » (clé + modèle). **La clé ne se relit jamais** : l'écran sait
+      qu'elle existe, peut la remplacer ou l'effacer, pas la voir.
+- [x] Catalogue **chargé en direct** (`GET /api/v1/models`), trié du moins cher au plus cher, tarif
+      affiché au million de jetons. La clé saisie peut être éprouvée **avant** d'être enregistrée.
+- [x] Fonction 1 — **message de commit** depuis `git diff --cached`. L'index fait foi, pas la
+      sélection de l'écran : c'est exactement ce qui sera validé. Message **éditable** avant
+      validation, jamais de commit automatique.
+- [x] Fonction 2 — **explication d'un diff**, depuis l'en-tête du panneau de diff.
+- [x] Fonction 3 — **analyse d'une sortie de service**, sur les 400 dernières lignes **visibles**
+      (filtres compris) : analyser des lignes masquées produirait une réponse hors sujet.
+- [x] Garde-fous : rien n'est envoyé sans un geste explicite ; sans clé ou sans modèle, l'erreur
+      dit lequel manque ; jetons de sortie plafonnés par usage (400 / 500 / 700).
+- [x] Le modèle n'est **jamais** figé dans le code — le catalogue et les tarifs bougent tous les
+      mois. L'application charge la liste, l'utilisateur choisit.
+- [ ] ⚠️ **La clé est stockée en clair** dans la base locale (`settings`), et l'écran le dit.
+      Le trousseau du système serait meilleur, mais ajoute une dépendance par plateforme et un
+      mode de panne (pas de service de secrets sur une session Linux sans bureau) pour une
+      fonction optionnelle. **Décision à revoir** si l'app doit porter d'autres secrets.
+- [ ] Indicateur de coût cumulé de la session — `estimateCost` existe côté front, rien ne l'affiche.
 
 ### 3.2 — Serveur MCP
 

@@ -1,10 +1,12 @@
-import { Minus, Plus, Undo2 } from "lucide-react";
+import { Loader2, Minus, Plus, Sparkles, Undo2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
+import { aiApi } from "@/lib/ai";
 import { formatError, toastError } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 
+import { gitApi } from "../ipc";
 import { useGitStore } from "../store";
 import type { FileChange, FileStatus, RepoState } from "../types";
 import { DiffViewer } from "./DiffViewer";
@@ -34,6 +36,9 @@ export function ChangesPanel({ repo }: Props) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const [message, setMessage] = useState("");
   const [committing, setCommitting] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explaining, setExplaining] = useState(false);
 
   const status = repo.status;
   const untrackedAsChanges = useMemo<FileChange[]>(
@@ -56,6 +61,37 @@ export function ChangesPanel({ repo }: Props) {
       toastError(formatError(error));
     } finally {
       setCommitting(false);
+    }
+  };
+
+  /**
+   * Rédige le message à partir de **l'index**, pas de la sélection de l'écran :
+   * c'est exactement ce qui sera validé.
+   */
+  const draftMessage = async () => {
+    setDrafting(true);
+    try {
+      const completion = await aiApi.commitMessage(repo.path);
+      setMessage(completion.text);
+    } catch (error) {
+      toastError(formatError(error));
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const explainSelection = async () => {
+    if (!selection) return;
+    setExplaining(true);
+    setExplanation(null);
+    try {
+      const diff = await gitApi.diff(repo.path, selection.path, selection.staged);
+      const completion = await aiApi.explainDiff(diff);
+      setExplanation(completion.text);
+    } catch (error) {
+      toastError(formatError(error));
+    } finally {
+      setExplaining(false);
     }
   };
 
@@ -222,27 +258,74 @@ export function ChangesPanel({ repo }: Props) {
               "focus-visible:border-(--color-accent) focus-visible:outline-none",
             )}
           />
-          <Button
-            size="sm"
-            disabled={committing || !message.trim() || status.staged.length === 0}
-            onClick={() => void doCommit()}
-          >
-            Valider {status.staged.length > 0 && `(${status.staged.length})`}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              title="Rédiger le message depuis l'index"
+              disabled={drafting || status.staged.length === 0}
+              onClick={() => void draftMessage()}
+            >
+              {drafting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              Rédiger
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              disabled={committing || !message.trim() || status.staged.length === 0}
+              onClick={() => void doCommit()}
+            >
+              Valider {status.staged.length > 0 && `(${status.staged.length})`}
+            </Button>
+          </div>
         </div>
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-(--color-bg)">
-        {selection ? (
-          <DiffViewer
-            key={`${selection.path}-${selection.staged}`}
-            repoPath={repo.path}
-            filePath={selection.path}
-            staged={selection.staged}
-          />
-        ) : (
-          <p className="p-6 text-center text-xs text-(--color-muted)">Choisissez un fichier</p>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-(--color-bg)">
+        {selection && (
+          <div className="flex shrink-0 items-center gap-2 border-b border-(--color-border) px-3 py-1.5">
+            <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-(--color-muted)">
+              {selection.path}
+            </span>
+            <button
+              type="button"
+              title="Expliquer ce changement"
+              disabled={explaining}
+              onClick={() => void explainSelection()}
+              className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-(--color-muted) transition-colors hover:bg-(--color-panel-hover) hover:text-(--color-accent)"
+            >
+              {explaining ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              Expliquer
+            </button>
+          </div>
         )}
+
+        {explanation && (
+          <p className="shrink-0 whitespace-pre-wrap border-b border-(--color-border) bg-(--color-panel) px-3 py-2 text-[11px] text-(--color-text-soft)">
+            {explanation}
+          </p>
+        )}
+
+        <div className="min-h-0 flex-1 overflow-auto">
+          {selection ? (
+            <DiffViewer
+              key={`${selection.path}-${selection.staged}`}
+              repoPath={repo.path}
+              filePath={selection.path}
+              staged={selection.staged}
+            />
+          ) : (
+            <p className="p-6 text-center text-xs text-(--color-muted)">Choisissez un fichier</p>
+          )}
+        </div>
       </div>
     </div>
   );

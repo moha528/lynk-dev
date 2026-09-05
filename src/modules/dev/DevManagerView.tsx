@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { formatError, toastError } from "@/lib/feedback";
+import type { CheckOptions } from "@/lib/selection";
+import { rangeBetween } from "@/lib/selection";
 
 import { NewProfileDialog } from "./components/NewProfileDialog";
 import { ProfileBar } from "./components/ProfileBar";
@@ -39,6 +41,8 @@ export function DevManagerView() {
   const removeService = useDevStore((s) => s.removeService);
 
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  /** Dernière ligne cochée à la main : point de départ d'un Maj+clic. */
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   /** `service: null` = création ; sinon on modifie celui-ci. */
   const [editing, setEditing] = useState<{ open: boolean; service: ServiceConfig | null }>({
@@ -60,13 +64,21 @@ export function DevManagerView() {
     [runtimes, checked],
   );
 
-  const check = (serviceId: string, value: boolean) => {
+  const check = (serviceId: string, value: boolean, options: CheckOptions) => {
+    // Maj+clic : toute la plage depuis l'ancre prend l'état de la case cliquée.
+    const targets =
+      options.shiftKey && anchor ? rangeBetween(options.ordered, anchor, serviceId) : [serviceId];
     setChecked((current) => {
       const next = new Set(current);
-      if (value) next.add(serviceId);
-      else next.delete(serviceId);
+      for (const id of targets) {
+        if (value) next.add(id);
+        else next.delete(id);
+      }
       return next;
     });
+    // L'ancre ne bouge pas pendant un Maj+clic : on peut étendre la plage
+    // plusieurs fois de suite depuis le même point de départ.
+    if (!options.shiftKey) setAnchor(serviceId);
   };
 
   const checkMany = (serviceIds: string[], value: boolean) => {
@@ -103,7 +115,10 @@ export function DevManagerView() {
           setChecked(new Set());
           guard(deleteProfile(activeProfileId));
         }}
-        onClearSelection={() => setChecked(new Set())}
+        onClearSelection={() => {
+          setChecked(new Set());
+          setAnchor(null);
+        }}
         onStart={(ids) => guard(startMany(ids))}
         onStop={(ids) => guard(stopMany(ids))}
         onRestart={(ids) => guard(restartMany(ids))}

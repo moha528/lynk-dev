@@ -3,6 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { formatError, toastError, toastInfo, toastSuccess } from "@/lib/feedback";
+import type { CheckOptions } from "@/lib/selection";
+import { rangeBetween } from "@/lib/selection";
 
 import { GitProfileBar } from "./components/GitProfileBar";
 import { NewGitProfileDialog } from "./components/NewGitProfileDialog";
@@ -33,6 +35,8 @@ export function GitManagerView() {
   const pushMany = useGitStore((s) => s.pushMany);
 
   const [checked, setChecked] = useState<Set<string>>(new Set());
+  /** Dernière ligne cochée à la main : point de départ d'un Maj+clic. */
+  const [anchor, setAnchor] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -46,13 +50,20 @@ export function GitManagerView() {
     [repos, checked],
   );
 
-  const check = (repoPath: string, value: boolean) => {
+  const check = (repoPath: string, value: boolean, options: CheckOptions) => {
+    const targets =
+      options.shiftKey && anchor ? rangeBetween(options.ordered, anchor, repoPath) : [repoPath];
     setChecked((current) => {
       const next = new Set(current);
-      if (value) next.add(repoPath);
-      else next.delete(repoPath);
+      for (const path of targets) {
+        if (value) next.add(path);
+        else next.delete(path);
+      }
       return next;
     });
+    // L'ancre ne bouge pas pendant un Maj+clic : on peut étendre la plage
+    // plusieurs fois depuis le même point de départ.
+    if (!options.shiftKey) setAnchor(repoPath);
   };
 
   const checkAll = (value: boolean) => {
@@ -97,7 +108,10 @@ export function GitManagerView() {
           setChecked(new Set());
           void deleteProfile(activeProfileId).catch((error) => toastError(formatError(error)));
         }}
-        onClearSelection={() => setChecked(new Set())}
+        onClearSelection={() => {
+          setChecked(new Set());
+          setAnchor(null);
+        }}
         onRefresh={() => void refreshAll()}
         onFetch={fetchMany}
         onPull={pullMany}

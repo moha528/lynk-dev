@@ -1,8 +1,10 @@
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
+import type { CheckOptions } from "@/lib/selection";
+import { neighbour } from "@/lib/selection";
 import { cn } from "@/lib/utils";
 
 import { dirtyCount } from "../types";
@@ -13,13 +15,16 @@ type Props = {
   selectedPath: string | null;
   onSelect: (repoPath: string) => void;
   checked: Set<string>;
-  onCheck: (repoPath: string, value: boolean) => void;
+  onCheck: (repoPath: string, value: boolean, options: CheckOptions) => void;
   onCheckAll: (value: boolean) => void;
 };
 
 export function RepoList({ repos, selectedPath, onSelect, checked, onCheck, onCheckAll }: Props) {
   const [query, setQuery] = useState("");
   const [onlyDirty, setOnlyDirty] = useState(false);
+  // `onCheckedChange` ne transmet pas l'événement : on retient l'état de la
+  // touche Maj au tout début du clic, avant que la case ne réagisse.
+  const shiftHeld = useRef(false);
 
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -34,6 +39,26 @@ export function RepoList({ repos, selectedPath, onSelect, checked, onCheck, onCh
   }, [repos, query, onlyDirty]);
 
   const allChecked = visible.length > 0 && visible.every((repo) => checked.has(repo.path));
+  /** Ordre réel à l'écran, filtres compris. */
+  const ordered = useMemo(() => visible.map((repo) => repo.path), [visible]);
+
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const next = neighbour(ordered, selectedPath, event.key === "ArrowDown" ? 1 : -1);
+      if (next) onSelect(next);
+      return;
+    }
+    if (event.key === " " && selectedPath) {
+      event.preventDefault();
+      onCheck(selectedPath, !checked.has(selectedPath), { shiftKey: event.shiftKey, ordered });
+      return;
+    }
+    if (event.key.toLowerCase() === "a" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      onCheckAll(true);
+    }
+  };
 
   return (
     <div className="flex min-h-0 flex-col">
@@ -61,10 +86,24 @@ export function RepoList({ repos, selectedPath, onSelect, checked, onCheck, onCh
           >
             Modifiés
           </button>
+          <span className="ml-auto text-[10px] text-(--color-muted-soft)">
+            Maj+clic pour une plage
+          </span>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-1">
+      {/* biome-ignore lint/a11y/useSemanticElements: une liste de lignes à la
+          fois sélectionnables et cochables n'a pas d'équivalent natif. */}
+      <div
+        role="listbox"
+        aria-label="Dépôts"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        onMouseDownCapture={(event) => {
+          shiftHeld.current = event.shiftKey;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto p-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-(--color-accent)"
+      >
         {visible.length === 0 && (
           <p className="px-3 py-6 text-center text-xs text-(--color-muted)">Aucun dépôt</p>
         )}
@@ -74,7 +113,7 @@ export function RepoList({ repos, selectedPath, onSelect, checked, onCheck, onCh
             repo={repo}
             active={repo.path === selectedPath}
             checked={checked.has(repo.path)}
-            onCheck={(value) => onCheck(repo.path, value)}
+            onCheck={(value) => onCheck(repo.path, value, { shiftKey: shiftHeld.current, ordered })}
             onSelect={() => onSelect(repo.path)}
           />
         ))}
@@ -104,6 +143,7 @@ function RepoRow({
       className={cn(
         "flex items-center gap-2 rounded-md px-1.5 py-1.5 transition-colors",
         active ? "bg-(--color-accent-bg)" : "hover:bg-(--color-panel-hover)",
+        checked && !active && "bg-(--color-panel)",
       )}
     >
       <Checkbox checked={checked} onCheckedChange={onCheck} />

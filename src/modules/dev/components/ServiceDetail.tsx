@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { LogView } from "@/components/ui/LogView";
+import { aiApi } from "@/lib/ai";
 import { formatError, toastError } from "@/lib/feedback";
 import { cn } from "@/lib/utils";
 
@@ -141,7 +142,20 @@ export function ServiceDetail({
         ))}
       </nav>
 
-      {tab === "logs" && <LogView lines={runtime.logs} onClear={onClearLogs} />}
+      {tab === "logs" && (
+        <LogView
+          lines={runtime.logs}
+          onClear={onClearLogs}
+          onSummarize={async (logs) => {
+            try {
+              return (await aiApi.summarizeLogs(logs)).text;
+            } catch (error) {
+              toastError(formatError(error));
+              throw error;
+            }
+          }}
+        />
+      )}
       {tab === "config" && <ConfigTab runtime={runtime} onEdit={onEdit} onDelete={onDelete} />}
       {tab === "env" && <EnvTab runtime={runtime} />}
     </div>

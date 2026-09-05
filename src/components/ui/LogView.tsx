@@ -1,4 +1,4 @@
-import { ArrowDownToLine, Copy, Search, Trash2 } from "lucide-react";
+import { ArrowDownToLine, Copy, Loader2, Search, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { LEVEL_CLASS, detectLevel, parseAnsi, stripAnsi } from "@/lib/ansi";
@@ -18,6 +18,13 @@ type Props = {
   lines: LogLine[];
   onClear: () => void;
   emptyLabel?: string;
+  /**
+   * Analyse des lignes **actuellement visibles**.
+   *
+   * Passée en propriété plutôt que codée ici : la visionneuse reste ignorante
+   * de l'assistance par modèle, et sert aussi bien sans elle.
+   */
+  onSummarize?: (logs: string) => Promise<string>;
 };
 
 const STREAMS: { id: LogStream; label: string }[] = [
@@ -33,10 +40,12 @@ const STICK_THRESHOLD = 40;
  * Visionneuse de logs : séquences ANSI interprétées, niveaux mis en évidence,
  * filtre par flux, recherche surlignée et suivi automatique.
  */
-export function LogView({ lines, onClear, emptyLabel = "Aucun log" }: Props) {
+export function LogView({ lines, onClear, emptyLabel = "Aucun log", onSummarize }: Props) {
   const [query, setQuery] = useState("");
   const [hidden, setHidden] = useState<Set<LogStream>>(new Set());
   const [follow, setFollow] = useState(true);
+  const [summary, setSummary] = useState<string | null>(null);
+  const [summarizing, setSummarizing] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
 
   const needle = query.trim().toLowerCase();
@@ -77,6 +86,24 @@ export function LogView({ lines, onClear, emptyLabel = "Aucun log" }: Props) {
       else next.add(stream);
       return next;
     });
+  };
+
+  const summarize = async () => {
+    if (!onSummarize) return;
+    setSummarizing(true);
+    setSummary(null);
+    try {
+      // On envoie **ce qui est à l'écran**, filtres compris : analyser des
+      // lignes que l'utilisateur a masquées produirait une réponse hors sujet.
+      // Et seulement la fin : c'est là que se trouve ce qui vient de casser.
+      const payload = visible
+        .slice(-400)
+        .map((line) => stripAnsi(line.text))
+        .join(String.fromCharCode(10));
+      setSummary(await onSummarize(payload));
+    } finally {
+      setSummarizing(false);
+    }
   };
 
   const copyAll = () => {
@@ -126,6 +153,19 @@ export function LogView({ lines, onClear, emptyLabel = "Aucun log" }: Props) {
           >
             <ArrowDownToLine className="h-3.5 w-3.5" />
           </IconButton>
+          {onSummarize && (
+            <IconButton
+              label="Analyser la sortie"
+              active={summarizing}
+              onClick={() => void summarize()}
+            >
+              {summarizing ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+            </IconButton>
+          )}
           <IconButton label="Copier" onClick={copyAll}>
             <Copy className="h-3.5 w-3.5" />
           </IconButton>
@@ -134,6 +174,22 @@ export function LogView({ lines, onClear, emptyLabel = "Aucun log" }: Props) {
           </IconButton>
         </div>
       </div>
+
+      {summary && (
+        <div className="flex shrink-0 items-start gap-2 border-b border-(--color-border) bg-(--color-panel) px-3 py-2">
+          <p className="min-w-0 flex-1 whitespace-pre-wrap text-[11px] text-(--color-text-soft)">
+            {summary}
+          </p>
+          <button
+            type="button"
+            aria-label="Fermer l'analyse"
+            onClick={() => setSummary(null)}
+            className="shrink-0 text-[11px] text-(--color-muted) hover:text-(--color-text)"
+          >
+            fermer
+          </button>
+        </div>
+      )}
 
       <div
         ref={scroller}

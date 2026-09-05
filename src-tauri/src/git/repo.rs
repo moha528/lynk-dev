@@ -252,6 +252,14 @@ pub async fn diff(repo: &Path, file: &str, staged: bool) -> Result<String> {
     })
 }
 
+/// Diff complet de **ce qui est indexé**, tous fichiers confondus.
+///
+/// C'est l'entrée de la rédaction assistée d'un message de commit : l'index
+/// fait foi, puisque c'est exactement ce qui sera validé.
+pub async fn staged_diff(repo: &Path) -> Result<String> {
+    Ok(git_safe(repo, &["diff", "--cached"]).await)
+}
+
 /// Contenu du fichier tel qu'il est dans `HEAD`.
 pub async fn show_file(repo: &Path, file: &str) -> Result<String> {
     let spec = format!("HEAD:{file}");
