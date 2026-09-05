@@ -12,6 +12,8 @@ export type AiConfig = {
   /** Une clé est enregistrée. **Sa valeur ne sort jamais du backend.** */
   apiKeySet: boolean;
   model: string | null;
+  /** Renseigné quand le trousseau du système est inutilisable. */
+  keychainError: string | null;
 };
 
 export type ModelInfo = {

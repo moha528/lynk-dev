@@ -1,9 +1,10 @@
-import { Check, Info, Keyboard, Palette, ShieldCheck, Sparkles, X } from "lucide-react";
+import { Check, Info, Keyboard, Palette, Plug, ShieldCheck, Sparkles, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AboutSection } from "@/components/AboutSection";
 import { AiSection } from "@/components/AiSection";
 import { KeybindingsSection } from "@/components/KeybindingsSection";
+import { McpSection } from "@/components/McpSection";
 import { SecuritySection } from "@/components/SecuritySection";
 import { TERMINAL_THEMES, type ThemeId } from "@/lib/themes";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,7 @@ type Props = {
   onClose: () => void;
 };
 
-type SectionId = "appearance" | "keybindings" | "security" | "ai" | "about";
+type SectionId = "appearance" | "keybindings" | "security" | "ai" | "mcp" | "about";
 
 type NavEntry = { id: SectionId; label: string; icon: React.ReactNode };
 
@@ -23,6 +24,7 @@ const NAV: NavEntry[] = [
   { id: "keybindings", label: "Raccourcis", icon: <Keyboard className="h-3.5 w-3.5" /> },
   { id: "security", label: "Sécurité", icon: <ShieldCheck className="h-3.5 w-3.5" /> },
   { id: "ai", label: "IA", icon: <Sparkles className="h-3.5 w-3.5" /> },
+  { id: "mcp", label: "MCP", icon: <Plug className="h-3.5 w-3.5" /> },
   { id: "about", label: "À propos", icon: <Info className="h-3.5 w-3.5" /> },
 ];
 
@@ -151,6 +153,8 @@ function SectionContent({ section }: { section: SectionId }) {
       return <SecuritySection />;
     case "ai":
       return <AiSection />;
+    case "mcp":
+      return <McpSection />;
     case "about":
       return <AboutSection />;
   }

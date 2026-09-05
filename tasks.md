@@ -59,12 +59,13 @@
 | D5 | Coloration syntaxique | **Shiki** | Les 7 thèmes de l'app (`src/lib/themes.ts`) existent tels quels dans les thèmes livrés par Shiki → mapping 1:1, zéro palette à réinventer. |
 | D6 | Transport MCP | **HTTP sur loopback**, hébergé par l'app | Un binaire MCP lancé par le client IA est un **autre process** : il ne peut pas piloter les enfants de Lynk Dev. Le superviseur doit rester unique → c'est l'app qui expose. Détail et alternative en §3.2. |
 | D7 | Modèle OpenRouter | **Configurable, liste chargée en direct** | Figer un identifiant de modèle dans le code le périme en trois mois. Défaut proposé + liste live via `GET /api/v1/models`. |
+| D9 | Où vivent les secrets ? | **Trousseau du système**, jamais la base locale | 2026-09-05, choix utilisateur (« je préfère le trousseau »). Revient sur l'arbitrage initial du 3.1 : la base SQLite est un fichier en clair lisible par tout process de la session. Coût assumé : une session Linux sans Secret Service n'a **pas** de trousseau — l'écran le dit et la fonction reste hors service, plutôt qu'un repli discret en clair qui annulerait le bénéfice. |
 | D8 | DB Explorer | **Hors périmètre — pas porté** | 2026-09-05, choix utilisateur : « plus besoin ». Aucune des features demandées n'en dépendait, et il pesait ~8 000 des ~18 000 lignes du port. L'app devient **Git + Dev**. |
 
 **Hypothèses assumées** (corriger ici si faux, ne pas demander) :
 - Le port vise la **parité fonctionnelle**, pas l'amélioration : on ne redessine pas l'UI en passant.
 - L'app reste **mono-fenêtre**, local-first, sans compte ni télémétrie.
-- La clé OpenRouter est **personnelle** et vit dans la base locale, jamais dans le dépôt.
+- La clé OpenRouter est **personnelle** et vit dans le trousseau du système (D9), jamais dans le dépôt.
 
 **Points ouverts** : aucun.
 
@@ -427,10 +428,15 @@ de la sélection.
       dit lequel manque ; jetons de sortie plafonnés par usage (400 / 500 / 700).
 - [x] Le modèle n'est **jamais** figé dans le code — le catalogue et les tarifs bougent tous les
       mois. L'application charge la liste, l'utilisateur choisit.
-- [ ] ⚠️ **La clé est stockée en clair** dans la base locale (`settings`), et l'écran le dit.
-      Le trousseau du système serait meilleur, mais ajoute une dépendance par plateforme et un
-      mode de panne (pas de service de secrets sur une session Linux sans bureau) pour une
-      fonction optionnelle. **Décision à revoir** si l'app doit porter d'autres secrets.
+- [x] **La clé vit dans le trousseau du système** (`secrets.rs`) — Credential Manager sur Windows,
+      Keychain sur macOS, Secret Service sur Linux. Décision D9, prise après coup : le premier jet
+      la laissait en clair dans `settings`. Une clé restée en clair d'une version antérieure est
+      **déplacée au démarrage**, et la ligne vidée — mais seulement après une écriture réussie :
+      sur une machine sans trousseau, perdre la clé en plus de ne pas pouvoir la protéger serait
+      la pire des deux issues.
+      ⚠️ Les appels du trousseau sont **bloquants** → `spawn_blocking`, sinon la boucle Tokio gèle.
+      ⚠️ Sans trousseau, **aucun repli en clair** : l'écran affiche la cause et la fonction
+      s'arrête là.
 - [ ] Indicateur de coût cumulé de la session — `estimateCost` existe côté front, rien ne l'affiche.
 
 ### 3.2 — Serveur MCP
@@ -443,18 +449,34 @@ voit pas les enfants de Lynk Dev. Deux façons de garder un superviseur unique :
 - *Écarté (mais compatible)* — un binaire `lynk-mcp` en stdio qui relaie vers ce même serveur.
   À n'ajouter que si un client IA ne sait pas parler HTTP.
 
-- [ ] Serveur MCP dans `src-tauri/src/mcp/`, démarré avec l'app, port + jeton persistés
-- [ ] Réglages : activer/désactiver, port, **régénérer le jeton**, bouton « copier la config client »
-- [ ] Outils **lecture** : `list_services` (nom, type, statut, PID, port, **démarré depuis**),
-      `get_service_logs` (n dernières lignes, filtre par flux), `check_port`, `get_service_health`
-- [ ] Outils **écriture** : `start_service`, `stop_service`, `restart_service`, `build_service`
-- [ ] Chaque outil = un appel au superviseur du Lot 1.2. **Aucune logique métier dans le MCP.**
-- [ ] Garde-fous : loopback strict, jeton obligatoire, écriture limitée aux services du profil
-      actif, **aucun outil d'exécution de commande arbitraire** (pas de `run_command` : ce serait
-      un shell distant déguisé)
-- [ ] Journal des appels MCP visible dans l'app (qui a redémarré quoi, et quand)
+- [x] Serveur MCP dans `src-tauri/src/mcp/` — `protocol` (JSON-RPC, **pur**), `tools` (le
+      catalogue), `journal` (la trace), `server` (le transport `axum` + les garde-fous).
+      Comme `dev/`, **aucune dépendance à Tauri** : le pont IPC vit dans `commands/mcp.rs`.
+- [x] Démarré avec l'app quand le réglage est actif. Port en base, **jeton dans le trousseau**
+      (D9). ⚠️ Le réglage « actif » n'est enregistré **qu'après** un démarrage réussi : retenir
+      « actif » alors que le port est pris ferait échouer chaque lancement en silence.
+- [x] Réglages : marche/arrêt, port, **régénérer le jeton**, « copier la configuration client ».
+      L'écran distingue **`enabled`** (ce qu'on a demandé) de **`running`** (ce qui est vrai) —
+      ils divergent quand le port est occupé, et inventer un état serait pire que le dire.
+- [x] Outils **lecture** : `list_services` (nom, type, statut, PID, port, **démarré depuis**),
+      `get_service_logs` (n lignes, filtre par flux), `check_port`, `get_service_health`
+- [x] Outils **écriture** : `start_service`, `stop_service`, `restart_service`, `build_service`
+- [x] Chaque outil = un appel au superviseur du Lot 1.2. **Aucune logique métier dans le MCP.**
+- [x] Tampon circulaire des sorties (`dev/logs.rs`) : le superviseur **diffuse** ses lignes sans
+      les garder, ce qui suffisait tant que la fenêtre était seule à écouter. Le MCP, lui, pose une
+      question au passé. Le tampon est un abonné de plus, dans `dev/` et non dans `mcp/` — il ne
+      doit rien au MCP. ⚠️ Il ne se remplit qu'à partir du démarrage de l'app.
+- [x] Garde-fous : écoute **strictement** sur `127.0.0.1`, jeton obligatoire comparé **à durée
+      constante**, écriture limitée aux services du profil actif (`dev_profile_id`), et contrôle de
+      l'en-tête `Origin` — sans lui, n'importe quelle page web ouverte dans le navigateur peut
+      poster vers `http://127.0.0.1:<port>` (réattribution DNS). **Aucun outil d'exécution de
+      commande arbitraire** : un `run_command` ferait de ce serveur un shell distant. Un test
+      vérifie cette absence, parce que le garde-fou tient par ce qui **n'est pas** exposé.
+- [x] Journal des appels visible dans l'app (outil, service visé, succès, durée), poussé en direct
+      par l'événement `mcp:call`. En mémoire et borné à 200 : c'est un fil d'activité, pas un audit.
 - [ ] Recette : brancher Claude Code dessus, lui demander « quels services tournent, depuis
-      quand ? », puis « redémarre celui qui est en erreur »
+      quand ? », puis « redémarre celui qui est en erreur ». **Jamais exécuté** — le serveur
+      compile et ses parties pures sont testées, aucun client MCP ne s'y est encore connecté.
 
 ---
 
@@ -489,6 +511,26 @@ voit pas les enfants de Lynk Dev. Deux façons de garder un superviseur unique :
     Vérifié le 2026-09-05 : `dialog:default` = `allow-message`, `allow-save`, **`allow-open`** ;
     `opener:default` = `allow-open-url`, **`allow-reveal-item-in-dir`**, `allow-default-urls`.
     Le sélecteur de dossier et l'ouverture de l'explorateur passent donc sans rien ajouter.
+
+12. **Un port éphémère relâché n'est pas un port libre.** Un test qui faisait `bind(0)` puis
+    `drop` pour obtenir « un port où personne n'écoute » a commencé à échouer le jour où un
+    **second binaire de test** (celui du MCP) s'est mis à demander des ports éphémères en
+    parallèle : le système a réattribué le numéro relâché, et la sonde y a trouvé quelqu'un.
+    Choisir dans une bande **hors** des plages éphémères (Windows 49152+, Linux 32768+) —
+    `24_100..24_200` ici. Vaut aussi pour les ports codés en dur dans les fixtures.
+
+13. **Les appels au trousseau sont bloquants.** `keyring` fait des appels système synchrones :
+    les lancer depuis une tâche Tokio fige la boucle. Tout passe par `spawn_blocking`.
+
+14. **`enabled` n'est pas `running`.** Le réglage dit ce qu'on a demandé, le socket dit ce qui
+    est vrai. Ils divergent dès que le port est pris. Un écran qui n'affiche que le réglage
+    ment ; et enregistrer « actif » avant d'avoir réussi à écouter fait échouer chaque
+    lancement suivant en silence.
+
+15. **Un serveur local sans contrôle d'`Origin` est ouvert au navigateur.** N'importe quelle page
+    web peut poster vers `http://127.0.0.1:<port>` ; seul le jeton l'arrête, et un jeton fuit
+    plus facilement qu'on ne le croit. Une origine **absente** est acceptée (client natif), une
+    origine **présente** doit être locale.
 
 ---
 

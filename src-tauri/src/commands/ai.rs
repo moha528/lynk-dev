@@ -4,6 +4,10 @@
 //! seulement s'il y en a une ; il peut la remplacer ou l'effacer, pas la lire.
 //! Un champ qui réaffiche un secret finit toujours par le montrer sur une
 //! capture d'écran.
+//!
+//! ⚠️ **La clé vit dans le trousseau du système**, pas dans la base locale
+//! (cf. [`crate::secrets`]). Le modèle choisi, lui, n'est pas un secret et reste
+//! dans `settings`.
 
 use std::path::Path;
 
@@ -14,10 +18,13 @@ use tauri::State;
 use crate::ai::openrouter::{self, Completion, ModelInfo};
 use crate::ai::prompts;
 use crate::git::repo;
+use crate::secrets;
 use crate::store::{settings as dao, DbPool};
 use crate::AppError;
 
-const KEY_API: &str = "ai_api_key";
+/// Ancien emplacement de la clé — en clair dans `settings`. Conservé pour la
+/// seule reprise ([`migrate_legacy_key`]), jamais écrit à nouveau.
+const LEGACY_KEY_API: &str = "ai_api_key";
 const KEY_MODEL: &str = "ai_model";
 
 /// Réponses courtes : un message de commit tient en quelques lignes, une
@@ -33,6 +40,10 @@ pub struct AiConfig {
     /// Une clé est enregistrée — sa valeur, elle, ne sort jamais d'ici.
     pub api_key_set: bool,
     pub model: Option<String>,
+    /// Renseigné quand le trousseau du système est inutilisable. L'écran le
+    /// montre tel quel : sans trousseau, la fonction est hors service, et le
+    /// dire vaut mieux qu'un « échec » sans cause.
+    pub keychain_error: Option<String>,
 }
 
 async fn read_string(pool: &DbPool, key: &str) -> Result<Option<String>, AppError> {
@@ -42,9 +53,15 @@ async fn read_string(pool: &DbPool, key: &str) -> Result<Option<String>, AppErro
         .filter(|value| !value.trim().is_empty()))
 }
 
+async fn read_api_key() -> Result<Option<String>, AppError> {
+    Ok(secrets::get(secrets::OPENROUTER_KEY)
+        .await?
+        .filter(|value| !value.trim().is_empty()))
+}
+
 /// Clé et modèle, ou une erreur explicite si l'un des deux manque.
 async fn credentials(pool: &DbPool) -> Result<(String, String), AppError> {
-    let Some(api_key) = read_string(pool, KEY_API).await? else {
+    let Some(api_key) = read_api_key().await? else {
         return Err(AppError(anyhow::anyhow!(
             "aucune clé OpenRouter enregistrée — Réglages > IA"
         )));
@@ -57,13 +74,45 @@ async fn credentials(pool: &DbPool) -> Result<(String, String), AppError> {
     Ok((api_key, model))
 }
 
+/// Déplace une clé restée en clair dans `settings` vers le trousseau, puis
+/// efface la ligne.
+///
+/// Appelée une fois au démarrage. ⚠️ La ligne n'est effacée **qu'après** une
+/// écriture réussie : sur une machine sans trousseau, perdre la clé en plus de
+/// ne pas pouvoir la protéger serait la pire des deux issues.
+pub async fn migrate_legacy_key(pool: &DbPool) {
+    let legacy = match read_string(pool, LEGACY_KEY_API).await {
+        Ok(Some(value)) => value,
+        Ok(None) => return,
+        Err(err) => {
+            tracing::warn!("reprise de la clé IA : lecture impossible ({err})");
+            return;
+        }
+    };
+
+    match secrets::set(secrets::OPENROUTER_KEY, legacy.trim()).await {
+        Ok(()) => {
+            if let Err(err) = dao::set(pool, LEGACY_KEY_API, &json!("")).await {
+                tracing::warn!("clé IA déplacée mais ligne en clair non vidée : {err}");
+            } else {
+                tracing::info!("clé IA déplacée de la base locale vers le trousseau");
+            }
+        }
+        Err(err) => tracing::warn!("clé IA laissée en base : trousseau indisponible ({err:#})"),
+    }
+}
+
 // ── Réglages ─────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn ai_config_get(pool: State<'_, DbPool>) -> Result<AiConfig, AppError> {
+    let keychain_error = secrets::store_error();
     Ok(AiConfig {
-        api_key_set: read_string(pool.inner(), KEY_API).await?.is_some(),
+        // Sans trousseau, inutile d'interroger : la réponse serait une erreur,
+        // et l'écran a déjà de quoi expliquer pourquoi.
+        api_key_set: keychain_error.is_none() && read_api_key().await?.is_some(),
         model: read_string(pool.inner(), KEY_MODEL).await?,
+        keychain_error,
     })
 }
 
@@ -76,7 +125,12 @@ pub async fn ai_config_set(
     model: Option<String>,
 ) -> Result<(), AppError> {
     if let Some(api_key) = api_key {
-        dao::set(pool.inner(), KEY_API, &json!(api_key.trim())).await?;
+        let api_key = api_key.trim();
+        if api_key.is_empty() {
+            secrets::delete(secrets::OPENROUTER_KEY).await?;
+        } else {
+            secrets::set(secrets::OPENROUTER_KEY, api_key).await?;
+        }
     }
     if let Some(model) = model {
         dao::set(pool.inner(), KEY_MODEL, &json!(model.trim())).await?;
@@ -89,13 +143,10 @@ pub async fn ai_config_set(
 /// Accepte une clé passée en argument : l'écran de réglages doit pouvoir
 /// éprouver une clé **avant** de l'enregistrer.
 #[tauri::command]
-pub async fn ai_list_models(
-    pool: State<'_, DbPool>,
-    api_key: Option<String>,
-) -> Result<Vec<ModelInfo>, AppError> {
+pub async fn ai_list_models(api_key: Option<String>) -> Result<Vec<ModelInfo>, AppError> {
     let key = match api_key.filter(|value| !value.trim().is_empty()) {
         Some(provided) => provided,
-        None => read_string(pool.inner(), KEY_API)
+        None => read_api_key()
             .await?
             .ok_or_else(|| AppError(anyhow::anyhow!("aucune clé OpenRouter enregistrée")))?,
     };

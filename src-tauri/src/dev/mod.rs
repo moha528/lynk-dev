@@ -6,6 +6,7 @@
 //! - [`batch`] — démarrages groupés ordonnés par dépendances ;
 //! - [`detect`] — la reconnaissance d'un dossier (le catalogue) ;
 //! - [`scan`] — le parcours d'une arborescence ;
+//! - [`logs`] — le tampon circulaire des sorties, pour les lecteurs tardifs ;
 //! - [`net`] / [`docker`] — les sondes ;
 //! - [`topo`] — le tri en couches.
 //!
@@ -17,6 +18,7 @@ pub mod detect;
 #[cfg(test)]
 mod detect_tests;
 pub mod docker;
+pub mod logs;
 pub mod net;
 pub mod scan;
 pub mod supervisor;

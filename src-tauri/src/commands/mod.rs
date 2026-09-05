@@ -5,5 +5,6 @@
 pub mod ai;
 pub mod dev;
 pub mod git;
+pub mod mcp;
 pub mod settings;
 pub mod vault;

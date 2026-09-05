@@ -47,6 +47,14 @@ window-vibrancy = "0.6"
 # Sondes de santé HTTP du Dev Manager (et, plus tard, client OpenRouter).
 # `rustls` plutôt qu'OpenSSL : pas de dépendance système à installer en CI.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+# Trousseau du système : Credential Manager (Windows), Keychain (macOS),
+# Secret Service (Linux). La feature `v1` par défaut sélectionne le bon magasin
+# par plateforme — ne pas la désactiver, le crate ne compile pas sans.
+keyring = "4"
+
+# Serveur MCP sur la boucle locale. `http1` suffit (un client sur 127.0.0.1),
+# et on se passe de `query`/`form`/`ws` : le transport MCP est un POST JSON.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
@@ -59,3 +67,8 @@ libc = "0.2"
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }
 tempfile = "3"
+# Les tests d'intégration (`tests/`) ne voient **pas** les dépendances
+# ordinaires du crate : il faut les redéclarer ici. `reqwest` sert de client
+# HTTP à l'épreuve de bout en bout du serveur MCP.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde_json = "1"

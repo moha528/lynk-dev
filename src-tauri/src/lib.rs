@@ -12,7 +12,9 @@ pub mod commands;
 pub mod dev;
 pub mod error;
 pub mod git;
+pub mod mcp;
 pub mod process;
+pub mod secrets;
 pub mod store;
 pub mod vault;
 #[cfg(target_os = "windows")]
@@ -80,14 +82,53 @@ pub fn run() {
             // propose une réinitialisation et on affiche un message clair
             // plutôt que de paniquer silencieusement.
             let pool = init_pool_or_recover(&db_path);
-            app.manage(pool);
+            app.manage(pool.clone());
+
+            // Reprise d'une clé IA restée en clair dans `settings` : elle part
+            // dans le trousseau du système, et la ligne est vidée.
+            {
+                let pool = pool.clone();
+                tauri::async_runtime::spawn(async move {
+                    commands::ai::migrate_legacy_key(&pool).await;
+                });
+            }
 
             // Le superviseur du Dev Manager vit aussi longtemps que l'app, et
             // reste ignorant de Tauri : on se contente de relayer son flux
             // d'événements vers la fenêtre.
             let supervisor = Supervisor::new(PORT_RELEASE_WAIT);
             spawn_dev_event_bridge(app.handle(), &supervisor);
+
+            // Deuxième abonné du même flux : un tampon circulaire, pour les
+            // lecteurs qui arrivent après coup — le serveur MCP demande « les
+            // 100 dernières lignes », question à laquelle un canal de diffusion
+            // ne sait pas répondre.
+            let logs = dev::logs::LogStore::new();
+            tauri::async_runtime::spawn(logs.drain(supervisor.subscribe()));
+
+            // Le serveur MCP : une façade de plus sur le **même** superviseur.
+            let journal = mcp::Journal::new();
+            let mcp_server = mcp::McpServer::new(
+                mcp::ToolContext {
+                    pool: pool.clone(),
+                    supervisor: Arc::clone(&supervisor),
+                    logs: Arc::clone(&logs),
+                },
+                Arc::clone(&journal),
+                app.package_info().version.to_string(),
+            );
+            spawn_mcp_journal_bridge(app.handle(), &journal);
+            {
+                let pool = pool.clone();
+                let server = Arc::clone(&mcp_server);
+                tauri::async_runtime::spawn(async move {
+                    commands::mcp::start_if_enabled(&pool, &server).await;
+                });
+            }
+
             app.manage(supervisor);
+            app.manage(logs);
+            app.manage(mcp_server);
 
             // Icône de zone de notification (tray). Non bloquant si ça échoue.
             if let Err(e) = build_tray(app.handle()) {
@@ -171,6 +212,13 @@ pub fn run() {
             commands::ai::ai_commit_message,
             commands::ai::ai_explain_diff,
             commands::ai::ai_summarize_logs,
+            commands::mcp::mcp_status,
+            commands::mcp::mcp_set_enabled,
+            commands::mcp::mcp_set_port,
+            commands::mcp::mcp_token,
+            commands::mcp::mcp_regenerate_token,
+            commands::mcp::mcp_calls,
+            commands::mcp::mcp_clear_calls,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -179,6 +227,12 @@ pub fn run() {
             // services survivent à la fenêtre et gardent leurs ports, et le
             // prochain démarrage échoue en « port déjà utilisé ».
             if matches!(event, tauri::RunEvent::Exit) {
+                // Le serveur MCP d'abord : il ne doit plus accepter d'ordre
+                // pendant qu'on démonte ce qu'il pilote.
+                if let Some(server) = app_handle.try_state::<Arc<mcp::McpServer>>() {
+                    let server = Arc::clone(server.inner());
+                    tauri::async_runtime::block_on(async move { server.stop().await });
+                }
                 if let Some(supervisor) = app_handle.try_state::<Arc<Supervisor>>() {
                     let supervisor = Arc::clone(supervisor.inner());
                     tauri::async_runtime::block_on(async move { supervisor.stop_all().await });
@@ -206,6 +260,28 @@ fn spawn_dev_event_bridge(app: &tauri::AppHandle, supervisor: &Arc<Supervisor>) 
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
                     tracing::warn!("{missed} evenements Dev Manager perdus (consommateur lent)");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
+}
+
+/// Relaie le journal du serveur MCP vers la fenêtre.
+///
+/// Même précaution que pour le flux du Dev Manager : un retard ne rompt pas la
+/// boucle, sinon le journal se tait pour le reste de la session.
+fn spawn_mcp_journal_bridge(app: &tauri::AppHandle, journal: &Arc<mcp::Journal>) {
+    let mut calls = journal.subscribe();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            match calls.recv().await {
+                Ok(record) => {
+                    let _ = app.emit("mcp:call", record);
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
+                    tracing::warn!("{missed} appels MCP non affichés (consommateur lent)");
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }

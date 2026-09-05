@@ -965,21 +965,31 @@ mod tests {
         assert!(sup.list("p1").is_empty());
     }
 
+    /// Un port sur lequel personne n'écoute.
+    ///
+    /// ⚠️ **Surtout pas un port éphémère qu'on relâche** (`bind(0)` puis
+    /// `drop`). C'était l'approche précédente, et elle a fini par échouer : le
+    /// système a réattribué ce numéro à un *autre binaire de test* qui tournait
+    /// en parallèle, et la sonde y a trouvé quelqu'un. On choisit donc dans une
+    /// bande **hors** des plages éphémères (Windows 49152+, Linux 32768+), que
+    /// l'allocateur du système ne distribue jamais tout seul.
+    async fn a_closed_port() -> u16 {
+        for port in 24_100..24_200 {
+            if let Ok(listener) = tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
+                drop(listener);
+                return port;
+            }
+        }
+        panic!("aucun port libre dans la bande de test");
+    }
+
     /// Un profil sans service géré ne remonte rien, et la sonde ne plante pas
     /// sur un port fermé.
     #[tokio::test]
     async fn probe_reports_a_stopped_service_as_undetected() {
         let sup = Supervisor::new(Duration::from_secs(1));
         let mut cfg = config("api", noop_command());
-        // Un port ephemere qu'on vient de relacher : personne n'ecoute dessus.
-        // (Le port 1 semblait commode, mais il est **privilegie** sous Unix :
-        // le test dependait alors des droits du process, pas du service.)
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .expect("bind");
-        let free_port = listener.local_addr().expect("addr").port();
-        drop(listener);
-        cfg.port = Some(free_port);
+        cfg.port = Some(a_closed_port().await);
         let profile = DevProfile {
             id: "p1".into(),
             name: "profil".into(),

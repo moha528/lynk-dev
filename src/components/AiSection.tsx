@@ -1,4 +1,4 @@
-import { Check, Loader2, Search } from "lucide-react";
+import { Check, Loader2, Search, TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
  *
  * - **La clé ne se relit pas.** On sait qu'elle est enregistrée, on peut la
  *   remplacer ou l'effacer, jamais la voir. Un champ qui réaffiche un secret
- *   finit sur une capture d'écran.
+ *   finit sur une capture d'écran. Elle vit dans le trousseau du système —
+ *   quand il n'y en a pas, l'écran le dit plutôt que de replier en silence sur
+ *   un stockage en clair.
  * - **Le catalogue est chargé en direct**, trié du moins cher au plus cher, avec
  *   le tarif affiché. Figer « le modèle pas cher du moment » dans le code, c'est
  *   garantir qu'il sera périmé dans trois mois.
@@ -121,9 +123,16 @@ export function AiSection() {
             Effacer la clé
           </button>
         )}
-        <p className="text-[11px] text-(--color-warning)">
-          Enregistrée en clair dans la base locale de l'application.
-        </p>
+        {config?.keychainError ? (
+          <p className="flex items-start gap-2 rounded-md border border-(--color-danger)/40 bg-(--color-danger)/10 px-2.5 py-2 text-[11px] text-(--color-danger)">
+            <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+            <span>{config.keychainError}</span>
+          </p>
+        ) : (
+          <p className="text-[11px] text-(--color-muted)">
+            Conservée dans le trousseau du système, jamais dans la base locale.
+          </p>
+        )}
       </section>
 
       <section className="flex min-h-0 flex-col gap-2">
