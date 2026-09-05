@@ -537,6 +537,55 @@ voit pas les enfants de Lynk Dev. Deux façons de garder un superviseur unique :
 
 ---
 
+## Passe d'audit — 2026-09-05
+
+Revue transverse après le lot 3. **Ce qui a été corrigé :**
+
+- [x] **`git add` sans `--`** : un fichier nommé `-x` ou `--chmod=…` était lu comme une option.
+      `unstage`, `discard_changes` et `discard_staged` avaient le séparateur, `stage` l'avait perdu
+      — et le `add` de `resolve_conflict` aussi. Test sur un vrai dépôt avec `--suspect.txt`.
+- [x] **`file_content` sortait du dépôt** : `Path::join` **remplace** la base quand on lui donne un
+      chemin absolu, donc `file_content(repo, "C:/Users/…/id_rsa")` lisait cette clé. Garde
+      lexicale (ni absolu, ni `..`, ni préfixe de lecteur) + test.
+- [x] **« Ouvrir dans le terminal » cassait sur un `&`** (Windows). `cmd.exe` re-analyse ce qui suit
+      `/C`, et Rust ne met des guillemets que s'il y a un espace : un dossier `C:\Dev\R&D\projet`
+      était coupé au `&` et la queue exécutée comme une commande. Ligne construite à la main,
+      guillemets compris, avec le titre vide qu'exige `start`.
+- [x] **L'entrée `xterm` ne faisait pas ce qu'elle annonçait** : `sh -c cd <dir>` exécute le script
+      `cd` **sans argument** (le chemin devient `$0`). La fenêtre s'ouvrait au mauvais endroit et se
+      refermait. `xterm` n'a pas d'option de répertoire : on hérite du répertoire courant, désormais
+      positionné pour **tous** les terminaux — filet quand une option change de nom.
+- [x] **`csp: null`** → politique restrictive (`default-src 'self'`, `object-src 'none'`,
+      `wasm-unsafe-eval` pour Shiki, `ipc:` pour Tauri), plus un `devCsp` distinct pour ne pas
+      couper le rechargement à chaud. ⚠️ **Non vérifié à l'exécution.**
+- [x] **Lecture de fichiers de configuration sans plafond** pendant le scan : un seul fichier
+      énorme portant le bon nom faisait enfler la mémoire. Plafond à 4 Mio.
+- [x] **`.gitignore` sans filet secrets** (`*.key`, `*.pem`, `.env`…).
+- [x] **L'écran IA ne disait pas ce qui sort de la machine.** Un diff indexé peut contenir un
+      `.env`, une sortie de service un mot de passe. Une ligne le dit.
+- [x] **Dépendances de build vulnérables** : 10 → 1, toutes hors runtime (elles ne partent pas dans
+      l'application, elles la construisent). `vite` monté sur la **7.x corrigée, pas la 8** : une
+      faille ne justifie pas une migration majeure. ⚠️ `@vitejs/plugin-react` 6 **exige Vite 8**
+      (il importe `vite/internal`) — le build l'a attrapé ; c'est la **5.2** qui va avec Vite 7.
+      Reste un `low` sur `esbuild`, transitif, sans version corrigée dans la ligne `vite` 7.
+
+**Constaté, non corrigé** (décisions à prendre, pas des oublis) :
+
+- Le **PIN est un verrou d'interface**, pas un chiffrement : la base locale reste en clair, et le
+  serveur MCP continue de servir même application verrouillée. Aucune limitation du nombre
+  d'essais non plus. Cohérent avec ce que l'écran annonce, mais à ne pas confondre avec du
+  chiffrement au repos.
+- `build()` n'enregistre pas son process : un build **survit à la fermeture** de l'application, et
+  deux builds du même service peuvent tourner en parallèle.
+- `kill_by_port` tue **qui que ce soit** sur le port, pas seulement notre orphelin.
+- Les sorties de service contiennent souvent des secrets (mots de passe de connexion au démarrage
+  d'un Spring Boot) ; `get_service_logs` les donne au modèle. Inhérent à la fonction.
+- Aucune trace des **échecs d'authentification** MCP — une tentative répétée est invisible.
+- Le commentaire d'en-tête de `vault/` parle encore de mots de passe SSH et d'une tâche `P3-T06`
+  hérités du modèle Lynk Client.
+
+---
+
 ## Ordre d'exécution
 
 1. **Lot 1.0** (socle) — dont la correction d'endpoint, qui est un vrai bug

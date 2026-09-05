@@ -19,7 +19,23 @@ use super::types::{ServiceScanResult, ServiceType};
 
 // ── Petits utilitaires de lecture ────────────────────────────────────────
 
+/// Plafond de lecture d'un fichier de configuration.
+///
+/// Un `package.json` ou un `pom.xml` légitime fait quelques kilo-octets. Le
+/// scan en ouvre des centaines d'affilée, sur une arborescence que l'utilisateur
+/// n'a pas forcément inspectée : sans plafond, **un seul** fichier énorme qui
+/// porte le bon nom suffit à faire enfler la mémoire de l'application.
+const MAX_CONFIG_BYTES: u64 = 4 * 1024 * 1024;
+
 pub(super) async fn read_file(path: &Path) -> Option<String> {
+    let size = tokio::fs::metadata(path).await.ok()?.len();
+    if size > MAX_CONFIG_BYTES {
+        tracing::warn!(
+            "{} ignoré : {size} octets, au-delà du plafond de lecture",
+            path.display()
+        );
+        return None;
+    }
     tokio::fs::read_to_string(path).await.ok()
 }
 

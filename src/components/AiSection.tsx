@@ -133,6 +133,12 @@ export function AiSection() {
             Conservée dans le trousseau du système, jamais dans la base locale.
           </p>
         )}
+        {/* Ce que l'utilisateur envoie ailleurs que chez lui ne se devine pas
+            depuis un bouton « Rédiger le message ». Un diff indexé peut contenir
+            un `.env`, une sortie de service un mot de passe de connexion. */}
+        <p className="text-[11px] text-(--color-muted)">
+          Les diffs et les lignes de log analysés sont envoyés à OpenRouter.
+        </p>
       </section>
 
       <section className="flex min-h-0 flex-col gap-2">

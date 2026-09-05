@@ -32,3 +32,15 @@ Thumbs.db
 
 # Playwright CLI cache
 .playwright-cli/
+
+# Secrets — filet de sécurité. La clé de signature vit dans ~/.tauri, la clé
+# OpenRouter et le jeton MCP dans le trousseau du système : rien de tout ça n'a
+# à approcher le dépôt. Ces motifs sont là pour le jour où un fichier atterrit
+# ici par accident.
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example

@@ -181,7 +181,10 @@ pub async fn stage(repo: &Path, files: &[String]) -> Result<()> {
     if files.is_empty() {
         return Ok(());
     }
-    let mut args = vec!["add".to_string()];
+    // ⚠️ Le `--` n'est pas décoratif : sans lui, un fichier nommé `-f` ou
+    // `--chmod=…` est lu par `git` comme une option. Les trois autres
+    // fonctions d'index l'avaient, celle-ci l'avait perdu.
+    let mut args = vec!["add".to_string(), "--".to_string()];
     args.extend_from_slice(files);
     git(repo, &as_str_slice(&args)).await?;
     Ok(())
@@ -267,10 +270,38 @@ pub async fn show_file(repo: &Path, file: &str) -> Result<String> {
 }
 
 /// Contenu du fichier tel qu'il est sur le disque.
+///
+/// ⚠️ Le chemin est **contraint au dépôt**. `Path::join` a un piège : joindre un
+/// chemin absolu **remplace** la base au lieu de s'y ajouter, donc un
+/// `file_content(repo, "C:/Users/…/id_rsa")` lirait cette clé. Aucun appelant
+/// légitime n'envoie ça — les chemins viennent de `git status`, qui les rend
+/// relatifs — mais une commande qui peut lire n'importe quel fichier du disque
+/// n'a pas à exister quand rien n'en a besoin.
 pub async fn file_content(repo: &Path, file: &str) -> Result<String> {
-    Ok(tokio::fs::read_to_string(repo.join(file))
-        .await
-        .unwrap_or_default())
+    let Some(path) = within(repo, file) else {
+        anyhow::bail!("chemin hors du dépôt : {file}");
+    };
+    Ok(tokio::fs::read_to_string(path).await.unwrap_or_default())
+}
+
+/// `repo/file`, ou `None` si `file` sort du dépôt (absolu, ou remontant par
+/// `..`). Purement lexical : pas d'accès disque, donc pas de course entre la
+/// vérification et la lecture.
+fn within(repo: &Path, file: &str) -> Option<std::path::PathBuf> {
+    use std::path::Component;
+
+    let candidate = Path::new(file);
+    if candidate.is_absolute() {
+        return None;
+    }
+    for component in candidate.components() {
+        match component {
+            Component::Normal(_) | Component::CurDir => {}
+            // `..`, une racine, ou un préfixe de lecteur Windows (`C:`).
+            _ => return None,
+        }
+    }
+    Some(repo.join(candidate))
 }
 
 // ── Fusion ───────────────────────────────────────────────────────────────
@@ -314,7 +345,7 @@ pub async fn merge_abort(repo: &Path) -> Result<()> {
 /// comme résolu.
 pub async fn resolve_conflict(repo: &Path, file: &str, side: ConflictSide) -> Result<()> {
     git(repo, &["checkout", side.flag(), "--", file]).await?;
-    git(repo, &["add", file]).await?;
+    git(repo, &["add", "--", file]).await?;
     Ok(())
 }
 
@@ -707,5 +738,44 @@ mod tests {
         let outcome = push(&repo, None, false).await.expect("pas une erreur");
         assert!(!outcome.success);
         assert!(!outcome.message.is_empty());
+    }
+
+    /// Le piège de `Path::join` : un chemin **absolu** remplace la base au lieu
+    /// de s'y ajouter. Sans garde, la lecture sortirait du dépôt.
+    #[test]
+    fn an_absolute_or_climbing_path_is_refused() {
+        let repo = Path::new("/depot");
+        assert!(within(repo, "src/main.rs").is_some());
+        assert!(within(repo, "./src/main.rs").is_some());
+        // Un nom accentué ou avec des espaces reste légitime.
+        assert!(within(repo, "données/été 2026.txt").is_some());
+
+        assert!(within(repo, "../secret").is_none());
+        assert!(within(repo, "src/../../secret").is_none());
+        assert!(within(repo, "/etc/passwd").is_none());
+        if cfg!(windows) {
+            assert!(within(repo, "C:/Users/PC/.ssh/id_rsa").is_none());
+            assert!(within(repo, r"\\serveur\partage").is_none());
+        }
+    }
+
+    /// Un fichier dont le nom commence par `-` doit pouvoir être indexé : sans
+    /// le `--`, `git add` le lit comme une option et refuse.
+    #[tokio::test]
+    async fn a_file_named_like_an_option_can_be_staged() {
+        let (_tmp, repo) = fixture().await;
+        tokio::fs::write(repo.join("--suspect.txt"), "contenu\n")
+            .await
+            .expect("write");
+
+        stage(&repo, &["--suspect.txt".to_string()])
+            .await
+            .expect("l'indexation ne doit pas prendre le nom pour une option");
+
+        let staged = status(&repo).await.expect("status").staged;
+        assert!(
+            staged.iter().any(|entry| entry.path == "--suspect.txt"),
+            "attendu dans l'index, obtenu {staged:?}"
+        );
     }
 }
