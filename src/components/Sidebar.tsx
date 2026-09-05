@@ -1,20 +1,14 @@
-import { Boxes, Database, GitBranch } from "lucide-react";
+import { MODULES, type ModuleId } from "@/lib/modules";
+import { cn } from "@/lib/utils";
 
 type SidebarProps = {
   width: number;
+  active: ModuleId;
+  onSelect: (id: ModuleId) => void;
 };
 
-/**
- * Left navigation rail. Template placeholder: the future Lynk Dev modules
- * (Git Manager, Dev Manager, DB Explorer) plug their entries in here.
- */
-export function Sidebar({ width }: SidebarProps) {
-  const modules = [
-    { id: "git", label: "Git Manager", icon: <GitBranch className="h-4 w-4" /> },
-    { id: "dev", label: "Dev Manager", icon: <Boxes className="h-4 w-4" /> },
-    { id: "db", label: "DB Explorer", icon: <Database className="h-4 w-4" /> },
-  ];
-
+/** Left navigation rail: one entry per Lynk Dev module. */
+export function Sidebar({ width, active, onSelect }: SidebarProps) {
   return (
     <aside
       style={{ width }}
@@ -23,21 +17,30 @@ export function Sidebar({ width }: SidebarProps) {
       <p className="px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-(--color-muted)">
         Modules
       </p>
-      {modules.map((m) => (
-        <button
-          key={m.id}
-          type="button"
-          disabled
-          className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs text-(--color-muted) opacity-60"
-          title="À venir"
-        >
-          <span className="text-(--color-muted)">{m.icon}</span>
-          <span className="flex-1 truncate font-medium">{m.label}</span>
-          <span className="rounded bg-(--color-panel) px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-(--color-muted-soft)">
-            soon
-          </span>
-        </button>
-      ))}
+      {MODULES.map((m) => {
+        const Icon = m.icon;
+        const isActive = m.id === active;
+        return (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onSelect(m.id)}
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-xs transition-colors",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--color-accent)",
+              isActive
+                ? "bg-(--color-accent-bg) font-medium text-(--color-text)"
+                : "text-(--color-muted) hover:bg-(--color-panel-hover) hover:text-(--color-text-soft)",
+            )}
+          >
+            <Icon
+              className={cn("h-4 w-4", isActive ? "text-(--color-accent)" : "text-(--color-muted)")}
+            />
+            <span className="flex-1 truncate">{m.label}</span>
+          </button>
+        );
+      })}
     </aside>
   );
 }

@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { withToast } from "@/lib/feedback";
 import { checkForUpdate, installUpdate } from "@/lib/updater";
 import { useShortcuts } from "@/lib/useShortcuts";
+import { DevManagerView } from "@/modules/dev/DevManagerView";
+import { GitManagerView } from "@/modules/git/GitManagerView";
 import { useKeybindingsStore } from "@/stores/useKeybindingsStore";
 import { useSettingsStore } from "@/stores/useSettingsStore";
 import { useVaultStore } from "@/stores/useVaultStore";
@@ -14,6 +16,7 @@ import { SettingsView } from "@/views/SettingsView";
 
 import { type CloseAction, CloseActionDialog } from "./CloseActionDialog";
 import { CommandPalette } from "./CommandPalette";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { Header } from "./Header";
 import { Sidebar } from "./Sidebar";
 import { SidebarResizer } from "./SidebarResizer";
@@ -21,6 +24,7 @@ import { UnlockOverlay } from "./UnlockOverlay";
 
 export function MainLayout() {
   const sidebarWidth = useSettingsStore((s) => s.sidebarWidth);
+  const activeModule = useSettingsStore((s) => s.activeModule);
   const autoLockMinutes = useSettingsStore((s) => s.autoLockMinutes);
   const setSetting = useSettingsStore((s) => s.set);
   const hydrate = useSettingsStore((s) => s.hydrate);
@@ -121,24 +125,24 @@ export function MainLayout() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-(--color-bg) text-(--color-text)">
-      <Header onOpenSettings={() => setSettingsOpen(true)} onOpenPalette={() => setPaletteOpen(true)} />
+      <Header
+        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenPalette={() => setPaletteOpen(true)}
+      />
 
       <div className="flex min-h-0 flex-1">
-        <Sidebar width={sidebarWidth} />
+        <Sidebar
+          width={sidebarWidth}
+          active={activeModule}
+          onSelect={(id) => setSetting("activeModule", id)}
+        />
         <SidebarResizer onResize={(w) => setSetting("sidebarWidth", w)} />
 
-        <main className="flex min-w-0 flex-1 flex-col items-center justify-center gap-3 bg-(--color-bg) p-8 text-center">
-          <img
-            src="/logo-mark.png"
-            alt=""
-            className="h-16 w-16 select-none opacity-90"
-            draggable={false}
-          />
-          <h1 className="text-lg font-semibold text-(--color-text)">Lynk Dev</h1>
-          <p className="max-w-md text-sm text-(--color-muted)">
-            Template de base prêt — fenêtre, tray, thèmes, réglages et verrouillage PIN en place.
-            Les modules Git / Dev / DB viennent se greffer ici.
-          </p>
+        <main className="flex min-w-0 flex-1 flex-col bg-(--color-bg)">
+          {/* Keyed on the module so switching away clears a previous crash. */}
+          <ErrorBoundary key={activeModule}>
+            {activeModule === "git" ? <GitManagerView /> : <DevManagerView />}
+          </ErrorBoundary>
         </main>
       </div>
 

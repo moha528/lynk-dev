@@ -174,11 +174,6 @@ function Toggle({
 
 function Logo() {
   return (
-    <img
-      src="/logo-mark.png"
-      alt="Lynk Dev"
-      className="h-10 w-10 select-none"
-      draggable={false}
-    />
+    <img src="/logo-mark.png" alt="Lynk Dev" className="h-10 w-10 select-none" draggable={false} />
   );
 }

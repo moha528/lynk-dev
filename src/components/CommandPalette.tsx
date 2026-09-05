@@ -93,9 +93,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings }: Props) {
         </div>
         <ul className="max-h-80 overflow-y-auto p-1.5">
           {filtered.length === 0 ? (
-            <li className="px-3 py-6 text-center text-xs text-(--color-muted)">
-              Aucune commande.
-            </li>
+            <li className="px-3 py-6 text-center text-xs text-(--color-muted)">Aucune commande.</li>
           ) : (
             filtered.map((c) => (
               <li key={c.id}>
@@ -110,7 +108,9 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings }: Props) {
                   <span className="text-(--color-muted)">{c.icon}</span>
                   <span className="flex-1 truncate">{c.label}</span>
                   {c.hint && (
-                    <span className="font-mono text-[10px] text-(--color-muted-soft)">{c.hint}</span>
+                    <span className="font-mono text-[10px] text-(--color-muted-soft)">
+                      {c.hint}
+                    </span>
                   )}
                 </button>
               </li>

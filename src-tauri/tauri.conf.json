@@ -28,7 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "publisher": "moha528",
     "category": "DeveloperTool",
     "shortDescription": "Suite d'outils de developpement desktop",

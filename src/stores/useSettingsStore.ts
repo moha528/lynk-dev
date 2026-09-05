@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { create } from "zustand";
 
+import { DEFAULT_MODULE, type ModuleId, isModuleId } from "@/lib/modules";
 import { DEFAULT_THEME, type ThemeId } from "@/lib/themes";
 
 /**
@@ -24,6 +25,12 @@ type Settings = {
   closeBehavior: "ask" | "tray" | "minimize" | "quit";
   /** Length of the configured PIN, for auto-submit on unlock. `null` = unknown. */
   pinLength: number | null;
+  /** Module shown in the main area. */
+  activeModule: ModuleId;
+  /** Dev Manager profile last opened. */
+  devProfileId: string | null;
+  /** Git Manager profile last opened. */
+  gitProfileId: string | null;
 };
 
 const DEFAULTS: Settings = {
@@ -36,6 +43,9 @@ const DEFAULTS: Settings = {
   lastSeenVersion: null,
   closeBehavior: "ask",
   pinLength: null,
+  activeModule: DEFAULT_MODULE,
+  devProfileId: null,
+  gitProfileId: null,
 };
 
 type SettingsState = Settings & {
@@ -54,6 +64,9 @@ const KEY_MAP: Record<keyof Settings, string> = {
   lastSeenVersion: "last_seen_version",
   closeBehavior: "close_behavior",
   pinLength: "pin_length",
+  activeModule: "active_module",
+  devProfileId: "dev_profile_id",
+  gitProfileId: "git_profile_id",
 };
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -65,7 +78,12 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const raw = await invoke<Record<string, unknown>>("get_all_settings");
       const patch: Record<string, unknown> = {};
       for (const [field, key] of Object.entries(KEY_MAP)) {
-        if (key in raw) patch[field] = raw[key];
+        if (!(key in raw)) continue;
+        // A database written by an older build can still hold a module that no
+        // longer exists (`"db"`). Skipping it keeps the default, where letting
+        // it through would render an empty main area.
+        if (field === "activeModule" && !isModuleId(raw[key])) continue;
+        patch[field] = raw[key];
       }
       set({ ...(patch as Partial<Settings>), hydrated: true });
     } catch (e) {

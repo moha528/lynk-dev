@@ -44,8 +44,17 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # Native window styling (Mica/Acrylic) — Windows + macOS
 window-vibrancy = "0.6"
 
+# Sondes de santé HTTP du Dev Manager (et, plus tard, client OpenRouter).
+# `rustls` plutôt qu'OpenSSL : pas de dépendance système à installer en CI.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Graphics_Dwm", "Win32_Foundation", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(unix)'.dependencies]
+# Indispensable pour tuer un GROUPE de process (`kill(-pid)`). Sans ça, `mvnw`
+# rend la main mais laisse `java` vivant, et le port reste occupé.
+libc = "0.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full", "test-util"] }

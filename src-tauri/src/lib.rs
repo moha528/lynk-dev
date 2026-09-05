@@ -8,7 +8,10 @@
 //! (Git / Dev / DB) viennent se greffer ici.
 
 pub mod commands;
+pub mod dev;
 pub mod error;
+pub mod git;
+pub mod process;
 pub mod store;
 pub mod vault;
 #[cfg(target_os = "windows")]
@@ -16,9 +19,19 @@ mod window_chrome;
 
 pub use error::AppError;
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
+
+use dev::types::DevEvent;
+use dev::Supervisor;
+
+/// Délai laissé à un port pour se libérer au redémarrage d'un service.
+/// L'OS peut encore démonter la socket d'écoute quand on tente de la reprendre.
+const PORT_RELEASE_WAIT: Duration = Duration::from_secs(10);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -68,6 +81,13 @@ pub fn run() {
             let pool = init_pool_or_recover(&db_path);
             app.manage(pool);
 
+            // Le superviseur du Dev Manager vit aussi longtemps que l'app, et
+            // reste ignorant de Tauri : on se contente de relayer son flux
+            // d'événements vers la fenêtre.
+            let supervisor = Supervisor::new(PORT_RELEASE_WAIT);
+            spawn_dev_event_bridge(app.handle(), &supervisor);
+            app.manage(supervisor);
+
             // Icône de zone de notification (tray). Non bloquant si ça échoue.
             if let Err(e) = build_tray(app.handle()) {
                 tracing::warn!("tray setup failed: {e}");
@@ -88,9 +108,102 @@ pub fn run() {
             commands::vault::vault_set_pin,
             commands::vault::vault_change_pin,
             commands::vault::vault_disable_pin,
+            commands::dev::dev_profile_list,
+            commands::dev::dev_profile_save,
+            commands::dev::dev_profile_delete,
+            commands::dev::dev_scan,
+            commands::dev::dev_detect,
+            commands::dev::dev_service_start,
+            commands::dev::dev_service_stop,
+            commands::dev::dev_service_restart,
+            commands::dev::dev_service_build,
+            commands::dev::dev_service_start_batch,
+            commands::dev::dev_service_stop_batch,
+            commands::dev::dev_service_restart_batch,
+            commands::dev::dev_port_check,
+            commands::dev::dev_port_check_batch,
+            commands::dev::dev_docker_health,
+            commands::dev::dev_service_probe,
+            commands::dev::dev_process_list,
+            commands::git::git_profile_list,
+            commands::git::git_profile_save,
+            commands::git::git_profile_delete,
+            commands::git::git_scan_repos,
+            commands::git::git_status,
+            commands::git::git_branches,
+            commands::git::git_log,
+            commands::git::git_stash_list,
+            commands::git::git_repo_config,
+            commands::git::git_checkout,
+            commands::git::git_create_branch,
+            commands::git::git_delete_branch,
+            commands::git::git_fetch,
+            commands::git::git_pull,
+            commands::git::git_push,
+            commands::git::git_stage,
+            commands::git::git_unstage,
+            commands::git::git_stage_all,
+            commands::git::git_discard_changes,
+            commands::git::git_discard_staged,
+            commands::git::git_commit,
+            commands::git::git_diff,
+            commands::git::git_show_file,
+            commands::git::git_file_content,
+            commands::git::git_merge,
+            commands::git::git_merge_abort,
+            commands::git::git_resolve_conflict,
+            commands::git::git_stash_save,
+            commands::git::git_stash_pop,
+            commands::git::git_stash_drop,
+            commands::git::git_set_config,
+            commands::git::git_unset_config,
+            commands::git::git_add_remote,
+            commands::git::git_remove_remote,
+            commands::git::git_set_remote_url,
+            commands::git::git_rename_remote,
+            commands::git::git_set_branch_upstream,
+            commands::git::git_unset_branch_upstream,
+            commands::git::git_open_in_terminal,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            // À la fermeture, couper tout ce qu'on supervise : sans ça les
+            // services survivent à la fenêtre et gardent leurs ports, et le
+            // prochain démarrage échoue en « port déjà utilisé ».
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(supervisor) = app_handle.try_state::<Arc<Supervisor>>() {
+                    let supervisor = Arc::clone(supervisor.inner());
+                    tauri::async_runtime::block_on(async move { supervisor.stop_all().await });
+                }
+            }
+        });
+}
+
+/// Relaie le flux du superviseur vers les événements de la fenêtre.
+///
+/// ⚠️ Un retard (`Lagged`) ne doit **pas** interrompre la boucle : un service
+/// bavard au démarrage ferait alors taire tous les logs jusqu'au redémarrage de
+/// l'application, sans le moindre message d'erreur.
+fn spawn_dev_event_bridge(app: &tauri::AppHandle, supervisor: &Arc<Supervisor>) {
+    let mut events = supervisor.subscribe();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            match events.recv().await {
+                Ok(DevEvent::Log(payload)) => {
+                    let _ = app.emit("dev:service:log", payload);
+                }
+                Ok(DevEvent::Status(payload)) => {
+                    let _ = app.emit("dev:service:status", payload);
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(missed)) => {
+                    tracing::warn!("{missed} evenements Dev Manager perdus (consommateur lent)");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
 }
 
 /// Boîte de dialogue native bloquante. Sur Windows : `MessageBoxW`. Ailleurs :
