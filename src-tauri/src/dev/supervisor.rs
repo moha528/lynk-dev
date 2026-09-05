@@ -965,43 +965,60 @@ mod tests {
         assert!(sup.list("p1").is_empty());
     }
 
-    /// Un port sur lequel personne n'écoute.
-    ///
-    /// ⚠️ **Surtout pas un port éphémère qu'on relâche** (`bind(0)` puis
-    /// `drop`). C'était l'approche précédente, et elle a fini par échouer : le
-    /// système a réattribué ce numéro à un *autre binaire de test* qui tournait
-    /// en parallèle, et la sonde y a trouvé quelqu'un. On choisit donc dans une
-    /// bande **hors** des plages éphémères (Windows 49152+, Linux 32768+), que
-    /// l'allocateur du système ne distribue jamais tout seul.
-    async fn a_closed_port() -> u16 {
-        for port in 24_100..24_200 {
-            if let Ok(listener) = tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
-                drop(listener);
-                return port;
-            }
-        }
-        panic!("aucun port libre dans la bande de test");
-    }
-
-    /// Un profil sans service géré ne remonte rien, et la sonde ne plante pas
-    /// sur un port fermé.
-    #[tokio::test]
-    async fn probe_reports_a_stopped_service_as_undetected() {
-        let sup = Supervisor::new(Duration::from_secs(1));
-        let mut cfg = config("api", noop_command());
-        cfg.port = Some(a_closed_port().await);
-        let profile = DevProfile {
+    fn profile_of(cfg: ServiceConfig) -> DevProfile {
+        DevProfile {
             id: "p1".into(),
             name: "profil".into(),
             root_path: ".".into(),
             services: vec![cfg],
             created_at: now_ms(),
-        };
+        }
+    }
 
-        let results = sup.probe(&profile).await;
+    /// Sans port ni URL de santé, il n'y a rien à sonder : la réponse est
+    /// « non détecté », et elle ne touche pas au réseau.
+    ///
+    /// ⚠️ **Ce test remplace une version qui cherchait « un port libre »** —
+    /// d'abord par `bind(0)` puis `drop`, ensuite dans une bande fixe. Les deux
+    /// ont échoué en intégration continue, et pour une raison de fond :
+    /// [`Supervisor::probe`] conclut à l'occupation quand il **n'arrive pas à
+    /// se mettre en écoute**. « Ce port est libre » est donc une affirmation
+    /// sur l'état de la machine entière, que rien ne garantit sur un agent
+    /// partagé. Les deux branches du test sont couvertes autrement, sans
+    /// dépendre de ce qui tourne à côté.
+    #[tokio::test]
+    async fn probe_reports_a_service_without_a_probe_as_undetected() {
+        let sup = Supervisor::new(Duration::from_secs(1));
+        let results = sup.probe(&profile_of(config("api", noop_command()))).await;
+
         assert_eq!(results.len(), 1);
         assert!(!results[0].detected);
         assert!(!results[0].via_health_check);
+    }
+
+    /// L'autre branche : un port réellement occupé doit être vu.
+    ///
+    /// Déterministe, parce que l'écoute est **maintenue ouverte** pendant la
+    /// sonde — l'inverse du test précédent, où la machine avait le dernier mot.
+    #[tokio::test]
+    async fn probe_detects_a_service_whose_port_is_taken() {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind");
+        let port = listener.local_addr().expect("addr").port();
+
+        let sup = Supervisor::new(Duration::from_secs(1));
+        let mut cfg = config("api", noop_command());
+        cfg.port = Some(port);
+        let results = sup.probe(&profile_of(cfg)).await;
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].detected, "le port {port} est pourtant occupé");
+        // Détecté par le port, pas par une URL de santé : l'identité du service
+        // n'est pas confirmée pour autant.
+        assert!(!results[0].via_health_check);
+
+        drop(listener);
     }
 
     #[tokio::test]
