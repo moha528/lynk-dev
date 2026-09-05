@@ -474,6 +474,9 @@ voit pas les enfants de Lynk Dev. Deux façons de garder un superviseur unique :
       vérifie cette absence, parce que le garde-fou tient par ce qui **n'est pas** exposé.
 - [x] Journal des appels visible dans l'app (outil, service visé, succès, durée), poussé en direct
       par l'événement `mcp:call`. En mémoire et borné à 200 : c'est un fil d'activité, pas un audit.
+- [x] « Effacer » dans la vue des logs vide **aussi** le tampon du backend (`dev_logs_clear`).
+      Sans ça, l'écran se vide et un modèle relit par `get_service_logs` des lignes que
+      l'utilisateur croit effacées — incohérence introduite par le tampon lui-même.
 - [ ] Recette : brancher Claude Code dessus, lui demander « quels services tournent, depuis
       quand ? », puis « redémarre celui qui est en erreur ». **Jamais exécuté** — le serveur
       compile et ses parties pures sont testées, aucun client MCP ne s'y est encore connecté.

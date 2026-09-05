@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use tauri::{Emitter, State};
 
+use crate::dev::logs::LogStore;
 use crate::dev::types::{
     DevProfile, DockerHealthReport, ManagedProcessInfo, PortCheckResult, PortRequest, ProbeResult,
     ScanProgress, ServiceScanResult,
@@ -177,6 +178,20 @@ pub async fn dev_service_restart_batch(
 }
 
 // ── Sondes ───────────────────────────────────────────────────────────────
+
+/// Oublie les lignes gardées pour un service.
+///
+/// ⚠️ Appelée par le bouton « Effacer » de la vue des logs. Sans elle, l'écran
+/// se vide mais le tampon garde tout, et `get_service_logs` (MCP) rend encore
+/// des lignes que l'utilisateur croit effacées.
+#[tauri::command]
+pub async fn dev_logs_clear(
+    logs: State<'_, Arc<LogStore>>,
+    service_id: String,
+) -> Result<(), AppError> {
+    logs.clear(&service_id);
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn dev_port_check(port: u16) -> Result<bool, AppError> {

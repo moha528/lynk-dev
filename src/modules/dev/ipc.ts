@@ -57,6 +57,8 @@ export const devApi = {
   probe: (profileId: string) => invoke<ProbeResult[]>("dev_service_probe", { profileId }),
   processList: (profileId: string) =>
     invoke<ManagedProcessInfo[]>("dev_process_list", { profileId }),
+  /** Vide aussi le tampon que lit le serveur MCP, pas seulement l'écran. */
+  clearLogs: (serviceId: string) => invoke<void>("dev_logs_clear", { serviceId }),
 };
 
 /**

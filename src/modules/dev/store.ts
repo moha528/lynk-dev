@@ -249,6 +249,10 @@ export const useDevStore = create<DevState>((set, get) => ({
     const runtime = get().runtimes[serviceId];
     if (!runtime) return;
     set({ runtimes: { ...get().runtimes, [serviceId]: { ...runtime, logs: [] } } });
+    // Le backend garde son propre tampon, que lit le serveur MCP. Sans cet
+    // appel, « Effacer » viderait l'écran en laissant un modèle relire ce que
+    // l'utilisateur croit effacé.
+    void devApi.clearLogs(serviceId).catch(() => undefined);
   },
 
   subscribe() {

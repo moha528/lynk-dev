@@ -162,6 +162,7 @@ pub fn run() {
             commands::dev::dev_service_start_batch,
             commands::dev::dev_service_stop_batch,
             commands::dev::dev_service_restart_batch,
+            commands::dev::dev_logs_clear,
             commands::dev::dev_port_check,
             commands::dev::dev_port_check_batch,
             commands::dev::dev_docker_health,
