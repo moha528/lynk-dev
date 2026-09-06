@@ -557,7 +557,11 @@ Revue transverse après le lot 3. **Ce qui a été corrigé :**
       positionné pour **tous** les terminaux — filet quand une option change de nom.
 - [x] **`csp: null`** → politique restrictive (`default-src 'self'`, `object-src 'none'`,
       `wasm-unsafe-eval` pour Shiki, `ipc:` pour Tauri), plus un `devCsp` distinct pour ne pas
-      couper le rechargement à chaud. ⚠️ **Non vérifié à l'exécution.**
+      couper le rechargement à chaud.
+      ✅ **Vérifié à l'exécution le 2026-09-06** : un diff s'affiche coloré dans l'application
+      installée. Ce seul test couvre le plus risqué — les scripts de l'app se chargent, le
+      WebAssembly de Shiki s'exécute, et l'IPC répond (sans quoi il n'y aurait pas de dépôt à
+      l'écran).
 - [x] **Lecture de fichiers de configuration sans plafond** pendant le scan : un seul fichier
       énorme portant le bon nom faisait enfler la mémoire. Plafond à 4 Mio.
 - [x] **`.gitignore` sans filet secrets** (`*.key`, `*.pem`, `.env`…).
