@@ -590,6 +590,83 @@ Revue transverse après le lot 3. **Ce qui a été corrigé :**
 
 ---
 
+## LOT 4 — Validation multi-dépôts (2026-09-06, à faire)
+
+**La demande.** Un chantier qui touche plusieurs dépôts est le cas *le plus
+courant*, et c'est précisément celui où l'on répète le même message de commit à
+la main dans chaque dépôt. Un message unique appliqué à tous les dépôts
+sélectionnés rend le message **parlant** : « feat(auth): rotation du jeton de
+service » raconte le chantier, pas la moitié qui traîne dans un dépôt donné.
+
+### Ce qui existe déjà et sert de socle
+
+- La liste de dépôts a déjà des **cases à cocher** avec sélection par plage
+  (`src/modules/git/components/RepoList.tsx`).
+- Les opérations groupées existent déjà pour Fetch / Pull / Push, avec un
+  exécuteur à parallélisme borné — `mapLimit` (`src/modules/git/store.ts:20`).
+- La commande unitaire est prête : `git_commit(repo_path, message, staged_files)`
+  (`src-tauri/src/commands/git.rs:171`).
+
+Le travail est donc surtout de l'orchestration et de l'UI, pas du backend.
+
+### À faire
+
+- [ ] Action **« Valider sur N dépôts »** dans la barre d'actions groupées, à
+      côté des Fetch / Pull / Push existants.
+- [ ] Une seule saisie de message, appliquée à tous les dépôts cochés.
+- [ ] **Chaque dépôt valide ce qui est dans SON index.** Pas de re-sélection de
+      fichiers depuis l'écran : l'index fait foi, comme pour le commit unitaire.
+- [ ] Option **« pousser dans la foulée »** — c'est le geste qui suit dans 100 %
+      des cas, et le Push groupé existe déjà.
+- [ ] Rapport **par dépôt** à la fin : validé / rien à valider / en échec.
+
+### Pièges nommés
+
+1. **Un dépôt sans rien dans l'index n'est pas une erreur.** Il est *sauté*, et
+   le rapport le dit. Le faire échouer transformerait l'action en tout-ou-rien
+   alors que cocher un dépôt propre est le geste le plus naturel du monde.
+2. **Pas de tout-ou-rien, et pas de faux succès.** Un hook qui refuse, un dépôt
+   en conflit : les autres continuent, et le résultat est rendu **par dépôt** —
+   exactement ce que fait déjà `push`, qui rend un `PushOutcome` au lieu de
+   lever. Il n'y a pas de transaction possible entre N dépôts : prétendre le
+   contraire serait mentir.
+3. **Le message rédigé par le modèle devra voir les N diffs.** `ai_commit_message`
+   part aujourd'hui du `git diff --cached` d'**un seul** dépôt
+   (`src-tauri/src/commands/ai.rs`). Pour le multi-dépôts, il faut concaténer les
+   diffs indexés en préfixant chacun de son dépôt, puis tronquer — sinon le
+   message ne parlera que du premier.
+4. **Ne pas réutiliser `mapLimit` sans réfléchir au parallélisme.** Valider en
+   parallèle est sans risque (des index différents), mais **pousser** en
+   parallèle sur douze dépôts vers le même hébergeur peut se faire jeter. Le
+   Push groupé actuel borne déjà : garder la même borne.
+5. **Une validation est irréversible dans l'usage courant.** Confirmer en
+   annonçant le nombre exact de dépôts touchés, et lesquels.
+
+### Recette
+
+Deux dépôts avec des modifications indexées, un troisième propre et coché.
+Valider les trois : deux commits identiques en message, le troisième sauté et
+signalé comme tel.
+
+---
+
+## Livraison — ce qu'il reste (2026-09-06)
+
+- [ ] **Captures d'écran** du site — 4 fichiers dans
+      `lynk-dev-site/public/images/captures/`, noms inchangés (cf. son README).
+- [ ] **Déployer le site** : `npx wrangler login` puis `pnpm deploy`.
+      ⚠️ Si Cloudflare attribue une autre URL que `lynk-dev.pages.dev`, corriger
+      `metadataBase` (`app/layout.tsx`) **et** le README de l'application.
+- [ ] **Tester les installeurs** du brouillon `v0.1.0`, puis le publier.
+- [ ] **Éprouver la chaîne de mise à jour** — impossible tant que la `v0.1.0`
+      est en brouillon : l'updater lit `releases/latest`, dont un brouillon ne
+      fait pas partie. Il faut publier la `v0.1.0`, puis sortir une `v0.1.1`.
+- [ ] **Recette MCP** : brancher un vrai client. C'est la dernière réserve du
+      lot 3 — le transport est éprouvé par des tests d'intégration HTTP, jamais
+      par un client réel.
+
+---
+
 ## Ordre d'exécution
 
 1. **Lot 1.0** (socle) — dont la correction d'endpoint, qui est un vrai bug
